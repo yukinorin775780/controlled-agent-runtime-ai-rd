@@ -20,10 +20,26 @@ Latest local evidence:
 | --- | --- |
 | Python tests | `460 passed` |
 | Golden replay evals | `50/50 passed` |
-| Web UI tests | `285 passed` |
+| Web UI tests | `286 passed` |
 | Benchmark dry-run | `4 cases selected` |
 
 See [Engineering Evidence Report](docs/evidence-report.md) for the reproducible report and the runtime claims it backs.
+
+## Runtime Workflow Examples
+
+These screenshots are generated from the same Web workbench using URL presets. They are visual entry points for the runtime behavior; the command-backed tests and evals above remain the regression evidence.
+
+| Agent workflow | What the screenshot demonstrates |
+| --- | --- |
+| Ops Agent | A policy publish intent is routed to the Ops agent, receives only the Ops tool allowlist, passes the policy gate, and commits `TOOL_CALL_APPROVED`. |
+| Research Agent | A ticket triage intent is routed to a read-only Research scope with retrieval tools while deploy controls remain masked. |
+| Reviewer Agent | A release audit intent is routed to Reviewer scope; direct publish is blocked and an audit event is still committed. |
+
+![Ops Agent workflow: policy publish tool call approved](docs/assets/runtime-workflow-ops.png)
+
+![Research Agent workflow: read-only ticket triage scope](docs/assets/runtime-workflow-research.png)
+
+![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
 
 ## Runtime Capabilities
 

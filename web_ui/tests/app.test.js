@@ -8,6 +8,7 @@ const TILED_ADAPTER_PATH = path.resolve(__dirname, "../tiled-adapter.js");
 const UI_EVENT_ADAPTER_PATH = path.resolve(__dirname, "../ui-event-adapter.js");
 const DIRECTOR_TRACE_PATH = path.resolve(__dirname, "../director-trace.js");
 const STATE_DIFF_RENDERER_PATH = path.resolve(__dirname, "../state-diff-renderer.js");
+const WORKBENCH_PATH = path.resolve(__dirname, "../workbench.js");
 const DEMO_SCRIPT_RUNNER_PATH = path.resolve(__dirname, "../demo-script-runner.js");
 const INPUT_CONTROLLER_PATH = path.resolve(__dirname, "../input-controller.js");
 const HUD_RENDERERS_PATH = path.resolve(__dirname, "../hud-renderers.js");
@@ -300,6 +301,7 @@ describe("web_ui/app.js UI bindings", () => {
     delete window.ControlledAgentUIEventAdapter;
     delete window.ControlledAgentDirectorTrace;
     delete window.ControlledAgentStateDiffRenderer;
+    delete window.ControlledAgentWorkbench;
     delete window.ControlledAgentDemoScriptRunner;
     delete window.ControlledAgentInputController;
     delete window.ControlledAgentHudRenderers;
@@ -315,6 +317,7 @@ describe("web_ui/app.js UI bindings", () => {
     delete window.ControlledAgentUIEventAdapter;
     delete window.ControlledAgentDirectorTrace;
     delete window.ControlledAgentStateDiffRenderer;
+    delete window.ControlledAgentWorkbench;
     delete window.ControlledAgentDemoScriptRunner;
     delete window.ControlledAgentInputController;
     delete window.ControlledAgentHudRenderers;
@@ -2122,6 +2125,28 @@ describe("web_ui/app.js UI bindings", () => {
     expect(mode.textContent).toBe("WORKBENCH READY");
     expect(summary.textContent).toContain("business intent");
     expect(visibleNodes.map((node) => node.dataset.node)).toEqual(["player_input"]);
+  });
+
+  test("test_workbench_query_preset_selects_scoped_agent_workflow", async () => {
+    window.history.replaceState({}, "", "http://localhost/?workbench_preset=release_audit&workbench_static=1");
+    loadNewModules();
+    jest.isolateModules(() => {
+      require(WORKBENCH_PATH);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 90));
+
+    expect(window.ControlledAgentWorkbench.initialPresetKey()).toBe("release_audit");
+    const active = document.querySelector("[data-workbench-preset].is-active");
+    expect(active).not.toBeNull();
+    expect(active.textContent).toContain("Release Audit");
+    expect(document.getElementById("dock-input").value).toContain("Reviewer Agent");
+    expect(document.getElementById("director-trace-mode").textContent).toBe("TOOL ORCHESTRATION");
+
+    const inspectorText = document.getElementById("json-inspector").textContent;
+    expect(inspectorText).toContain('"selected_agent": "reviewer_agent"');
+    expect(inspectorText).toContain('"decision": "blocked"');
+    expect(inspectorText).toContain('"audit_log_write"');
+    expect(document.getElementById("payload-summary").textContent).toContain("direct_publish_action");
   });
 
   test("test_director_timeline_trap_insight_summary_highlights_actor_runtime_ui", async () => {

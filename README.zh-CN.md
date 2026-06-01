@@ -18,10 +18,26 @@ python scripts/generate_evidence_report.py
 | --- | --- |
 | Python tests | `460 passed` |
 | Golden replay evals | `50/50 passed` |
-| Web UI tests | `285 passed` |
+| Web UI tests | `286 passed` |
 | Benchmark dry-run | `4 cases selected` |
 
 完整报告见：[Engineering Evidence Report](docs/evidence-report.md)。
+
+## Agent 工作流示例
+
+下面三张图都来自同一个 Web Workbench 的 URL preset，不是手工拼图。它们用于快速说明运行时行为；真正的回归证据仍然是上面的测试、golden replay 和 benchmark dry-run。
+
+| Agent 工作流 | 图中证明点 |
+| --- | --- |
+| Ops Agent | 发布策略变更的意图被路由到 Ops Agent，只拿到 Ops 工具白名单，通过 Tool Gate 后提交 `TOOL_CALL_APPROVED`。 |
+| Research Agent | 工单归因意图被路由到只读 Research 作用域，只能使用检索/聚类工具，发布控制字段被屏蔽。 |
+| Reviewer Agent | 发布审计意图被路由到 Reviewer 作用域，直接发布被 Tool Gate 阻断，但审计事件仍然落入 EventDrain。 |
+
+![Ops Agent workflow: policy publish tool call approved](docs/assets/runtime-workflow-ops.png)
+
+![Research Agent workflow: read-only ticket triage scope](docs/assets/runtime-workflow-research.png)
+
+![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
 
 ## 运行时能力
 

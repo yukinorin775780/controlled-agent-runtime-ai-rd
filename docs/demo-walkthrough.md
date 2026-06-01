@@ -8,6 +8,14 @@ Recommended URL:
 http://127.0.0.1:8000/web_ui/?session_id=demo_run_001&map_id=hazard_lab&qa_no_idle=1
 ```
 
+Preset URLs for reproducible workflow screenshots:
+
+```text
+http://127.0.0.1:8000/web_ui/?session_id=workflow_ops&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=policy_publish
+http://127.0.0.1:8000/web_ui/?session_id=workflow_research&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=ticket_triage
+http://127.0.0.1:8000/web_ui/?session_id=workflow_reviewer&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=release_audit
+```
+
 ## Setup
 
 ```bash
@@ -29,6 +37,14 @@ make check
 4. Open Payload Inspector and point out `selected_agent`, `allowed_tools`, `masked_fields`, `policy_gate`, `proposed_tool_call`, and `domain_events`.
 5. Switch to `Release Audit` and show how the same flow can block direct publish while still committing an audit event.
 6. Mention that the map behind the workbench is a scenario preview used to keep the runtime grounded in a stateful environment.
+
+## Workflow Evidence Screenshots
+
+![Ops Agent workflow: policy publish tool call approved](assets/runtime-workflow-ops.png)
+
+![Research Agent workflow: read-only ticket triage scope](assets/runtime-workflow-research.png)
+
+![Reviewer Agent workflow: direct publish blocked, audit committed](assets/runtime-workflow-reviewer.png)
 
 ## Technical Points To Show
 

@@ -77,6 +77,28 @@
     return Array.isArray(value) ? value : [];
   }
 
+  function queryParams() {
+    try {
+      return new URLSearchParams(window.location.search || "");
+    } catch (_err) {
+      return new URLSearchParams();
+    }
+  }
+
+  function hasPreset(key) {
+    return Object.prototype.hasOwnProperty.call(PRESETS, key);
+  }
+
+  function initialPresetKey() {
+    const requested = String(queryParams().get("workbench_preset") || "").trim();
+    return hasPreset(requested) ? requested : "policy_publish";
+  }
+
+  function queryFlag(name) {
+    const value = String(queryParams().get(name) || "").trim().toLowerCase();
+    return value === "1" || value === "true" || value === "yes";
+  }
+
   function payloadForPreset(preset) {
     const status = preset.result === "blocked_publish" ? "blocked" : "approved";
     return {
@@ -226,10 +248,11 @@
     renderPayload(payload);
     renderSignals(payload);
     if (window.ControlledAgentDirectorTrace && typeof window.ControlledAgentDirectorTrace.activateTrace === "function") {
+      const staticTrace = options.staticTrace === true;
       window.ControlledAgentDirectorTrace.activateTrace(TRACE_NODES, {
         animate: options.animate !== false,
         stepMs: 280,
-        autoIdleMs: 9000,
+        autoIdleMs: staticTrace ? 3600000 : 9000,
         data: payload,
         userLine: preset.intent,
         intent: "TOOL_ORCHESTRATION",
@@ -239,10 +262,16 @@
   }
 
   function bind() {
+    const staticTrace = queryFlag("workbench_static");
     document.querySelectorAll("[data-workbench-preset]").forEach((button) => {
-      button.addEventListener("click", () => activatePreset(button.dataset.workbenchPreset || "policy_publish"));
+      button.addEventListener("click", () => activatePreset(button.dataset.workbenchPreset || "policy_publish", {
+        staticTrace,
+      }));
     });
-    window.setTimeout(() => activatePreset("policy_publish", { animate: false }), 60);
+    window.setTimeout(() => activatePreset(initialPresetKey(), {
+      animate: !staticTrace,
+      staticTrace,
+    }), 60);
   }
 
   if (document.readyState === "loading") {
@@ -254,6 +283,7 @@
   window.ControlledAgentWorkbench = Object.freeze({
     PRESETS,
     activatePreset,
+    initialPresetKey,
     payloadForPreset,
   });
 })();
