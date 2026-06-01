@@ -44,6 +44,11 @@
               <span>Reviewer Agent · ci_status -> audit_log_write</span>
             </button>
           </div>
+          <div id="workbench-outcome" class="workbench-outcome" data-outcome="approved" aria-live="polite">
+            <span id="workbench-outcome-label">TOOL CALL APPROVED</span>
+            <strong id="workbench-outcome-title">Ops Agent can publish after eval gate</strong>
+            <small id="workbench-outcome-detail">Allowed tool call is committed through EventDrain.</small>
+          </div>
         </section>
 
         <section class="workbench-panel workbench-panel--flow">
@@ -52,11 +57,11 @@
             <h2>Runtime Flow</h2>
           </div>
           <div class="workbench-flow" aria-label="Runtime flow">
-            <div><strong>Intent</strong><small>业务意图</small></div>
-            <div><strong>Router</strong><small>路由分类</small></div>
-            <div><strong>Scoped View</strong><small>上下文/工具白名单</small></div>
-            <div><strong>Tool Gate</strong><small>鉴权/参数校验</small></div>
-            <div><strong>EventDrain</strong><small>审计提交</small></div>
+            <div data-step="intent"><strong>Intent</strong><small>业务意图</small></div>
+            <div data-step="router"><strong>Router</strong><small>路由分类</small></div>
+            <div data-step="scope"><strong>Scoped View</strong><small>上下文/工具白名单</small></div>
+            <div data-step="tool_gate"><strong>Tool Gate</strong><small>鉴权/参数校验</small></div>
+            <div data-step="event_drain"><strong>EventDrain</strong><small>审计提交</small></div>
           </div>
         </section>
 
@@ -66,9 +71,22 @@
             <h2>Scoped AgentView</h2>
           </div>
           <div class="scope-table">
-            <div><strong>Ops Agent</strong><span>eval_summary, publish_policy_patch</span><small>masked: raw PII, billing token</small></div>
-            <div><strong>Research Agent</strong><span>ticket_search, kb_lookup</span><small>masked: deploy controls</small></div>
-            <div><strong>Reviewer Agent</strong><span>ci_status, audit_log_write</span><small>masked: direct publish</small></div>
+            <div data-agent="ops_agent"><strong>Ops Agent</strong><span>eval_summary, publish_policy_patch</span><small>masked: raw PII, billing token</small></div>
+            <div data-agent="research_agent"><strong>Research Agent</strong><span>ticket_search, kb_lookup</span><small>masked: deploy controls</small></div>
+            <div data-agent="reviewer_agent"><strong>Reviewer Agent</strong><span>ci_status, audit_log_write</span><small>masked: direct publish</small></div>
+          </div>
+        </section>
+
+        <section class="workbench-panel workbench-panel--evidence">
+          <div class="workbench-panel-head">
+            <span>04</span>
+            <h2>Runtime Proof</h2>
+          </div>
+          <div class="workbench-proof-grid" aria-label="Runtime proof">
+            <div><span>Selected agent</span><strong id="workbench-proof-agent">ops_agent</strong></div>
+            <div><span>Allowed tools</span><strong id="workbench-proof-tools">eval_summary, publish_policy_patch</strong></div>
+            <div><span>Masked fields</span><strong id="workbench-proof-masked">raw_user_pii, billing_token</strong></div>
+            <div><span>EventDrain commit</span><strong id="workbench-proof-events">TOOL_CALL_APPROVED</strong></div>
           </div>
         </section>
       </div>
@@ -387,7 +405,7 @@
   <script src="./ui-event-adapter.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./director-trace.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./state-diff-renderer.js?v=20260522_act2_trap_semantics_v10" defer></script>
-  <script src="./workbench.js?v=20260601_runtime_workflow_examples" defer></script>
+  <script src="./workbench.js?v=20260601_runtime_workflow_evidence_v2" defer></script>
   <script src="./demo-script-runner.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./input-controller.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./hud-renderers.js?v=20260522_act2_trap_semantics_v10" defer></script>

@@ -12,6 +12,12 @@
       route: "tool_orchestration.policy_publish",
       tools: ["eval_summary", "policy_diff_read", "publish_policy_patch"],
       maskedFields: ["raw_user_pii", "billing_token", "private_escalation_notes"],
+      outcome: {
+        tone: "approved",
+        label: "TOOL CALL APPROVED",
+        title: "Ops Agent can publish after eval gate",
+        detail: "Policy diff and golden eval pass before publish_policy_patch is allowed.",
+      },
       toolCall: {
         name: "publish_policy_patch",
         args: {
@@ -29,6 +35,12 @@
       route: "tool_orchestration.ticket_triage",
       tools: ["ticket_search", "kb_lookup", "semantic_cluster"],
       maskedFields: ["account_id", "payment_context", "internal_owner_notes"],
+      outcome: {
+        tone: "read_only",
+        label: "READ-ONLY SCOPE",
+        title: "Research Agent can retrieve but cannot publish",
+        detail: "Ticket search and KB lookup are available; deploy controls stay masked.",
+      },
       toolCall: {
         name: "ticket_search",
         args: {
@@ -38,7 +50,7 @@
         },
       },
       domainEvents: ["SCOPE_FILTER_APPLIED", "TOOL_CALL_APPROVED", "TRIAGE_CANDIDATES_EMITTED"],
-      result: "approved",
+      result: "read_only",
     },
     release_audit: {
       intent: "让 Reviewer Agent 检查灰度发布状态，禁止直接发布，只写入 release audit。",
@@ -46,6 +58,12 @@
       route: "tool_orchestration.release_audit",
       tools: ["ci_status", "eval_summary", "audit_log_write"],
       maskedFields: ["deploy_token", "direct_publish_action"],
+      outcome: {
+        tone: "blocked",
+        label: "DIRECT PUBLISH BLOCKED",
+        title: "Reviewer Agent writes audit without release power",
+        detail: "Tool gate blocks direct publish while EventDrain still commits audit evidence.",
+      },
       toolCall: {
         name: "audit_log_write",
         args: {
@@ -99,8 +117,18 @@
     return value === "1" || value === "true" || value === "yes";
   }
 
+  function decisionForPreset(preset) {
+    if (preset.result === "blocked_publish") return "blocked";
+    if (preset.result === "read_only") return "approved_read_only";
+    return "approved";
+  }
+
+  function isBlockedDecision(decision) {
+    return decision === "blocked";
+  }
+
   function payloadForPreset(preset) {
-    const status = preset.result === "blocked_publish" ? "blocked" : "approved";
+    const status = decisionForPreset(preset);
     return {
       intent: "TOOL_ORCHESTRATION",
       route: preset.route,
@@ -118,14 +146,14 @@
       policy_gate: {
         schema_valid: true,
         role_allowed: true,
-        preconditions_met: status === "approved",
+        preconditions_met: !isBlockedDecision(status),
         decision: status,
       },
       proposed_tool_call: preset.toolCall,
       domain_events: preset.domainEvents,
       ui_events: [
         { type: "policy_check", result: status },
-        { type: status === "approved" ? "tool_call_approved" : "tool_call_blocked", tool: preset.toolCall.name },
+        { type: isBlockedDecision(status) ? "tool_call_blocked" : "tool_call_approved", tool: preset.toolCall.name },
         { type: "audit_event", result: preset.domainEvents[preset.domainEvents.length - 1] },
       ],
     };
@@ -137,6 +165,7 @@
       estimated: true,
     };
     const status = payload.policy_gate.decision;
+    const blocked = isBlockedDecision(status);
     return {
       player_input: {
         ...base,
@@ -173,7 +202,7 @@
         ms: 96,
         explanation: "Policy/tool gate validates schema, permission, and preconditions.",
         input: JSON.stringify(preset.toolCall.args),
-        output: status === "approved" ? "tool call approved" : "direct publish blocked",
+        output: blocked ? "direct publish blocked" : "tool call approved",
         signal: "agent_signal",
       },
       event_drain: {
@@ -193,6 +222,11 @@
         signal: "agent_signal",
       },
     };
+  }
+
+  function setText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = String(value || "-");
   }
 
   function renderPayload(payload) {
@@ -224,7 +258,7 @@
     const risk = $("fear-label");
     const riskValue = $("fear-value");
     const riskBar = $("fear-bar");
-    const approved = payload.policy_gate.decision === "approved";
+    const approved = !isBlockedDecision(payload.policy_gate.decision);
     if (confidence) confidence.textContent = "Policy Confidence";
     if (confidenceValue) confidenceValue.textContent = approved ? "92" : "68";
     if (confidenceBar) confidenceBar.style.width = approved ? "92%" : "68%";
@@ -239,12 +273,44 @@
     });
   }
 
+  function renderWorkbenchEvidence(preset, payload) {
+    const tone = (preset.outcome && preset.outcome.tone) || "approved";
+    const root = $("runtime-workbench");
+    if (root) root.dataset.outcome = tone;
+
+    const status = document.querySelector(".workbench-status strong");
+    if (status) status.textContent = (preset.outcome && preset.outcome.label) || payload.policy_gate.decision;
+
+    const outcome = $("workbench-outcome");
+    if (outcome) outcome.dataset.outcome = tone;
+    setText("workbench-outcome-label", preset.outcome && preset.outcome.label);
+    setText("workbench-outcome-title", preset.outcome && preset.outcome.title);
+    setText("workbench-outcome-detail", preset.outcome && preset.outcome.detail);
+
+    setText("workbench-proof-agent", payload.selected_agent);
+    setText("workbench-proof-tools", safeArray(payload.scoped_agent_view.allowed_tools).join(", "));
+    setText("workbench-proof-masked", safeArray(payload.scoped_agent_view.masked_fields).join(", "));
+    setText("workbench-proof-events", safeArray(payload.domain_events).join(" -> "));
+
+    document.querySelectorAll(".scope-table [data-agent]").forEach((row) => {
+      const selected = row.dataset.agent === payload.selected_agent;
+      row.classList.toggle("is-selected", selected);
+      row.classList.toggle("is-muted", !selected);
+    });
+
+    document.querySelectorAll(".workbench-flow [data-step]").forEach((step) => {
+      step.classList.toggle("is-route-active", ["intent", "router", "scope"].includes(step.dataset.step || ""));
+      step.classList.toggle("is-gate-active", ["tool_gate", "event_drain"].includes(step.dataset.step || ""));
+    });
+  }
+
   function activatePreset(key, options = {}) {
     const preset = PRESETS[key] || PRESETS.policy_publish;
     const payload = payloadForPreset(preset);
     setActiveButton(key);
     const dock = $("dock-input");
     if (dock) dock.value = preset.intent;
+    renderWorkbenchEvidence(preset, payload);
     renderPayload(payload);
     renderSignals(payload);
     if (window.ControlledAgentDirectorTrace && typeof window.ControlledAgentDirectorTrace.activateTrace === "function") {

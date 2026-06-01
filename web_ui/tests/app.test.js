@@ -2141,6 +2141,11 @@ describe("web_ui/app.js UI bindings", () => {
     expect(active.textContent).toContain("Release Audit");
     expect(document.getElementById("dock-input").value).toContain("Reviewer Agent");
     expect(document.getElementById("director-trace-mode").textContent).toBe("TOOL ORCHESTRATION");
+    expect(document.getElementById("runtime-workbench").dataset.outcome).toBe("blocked");
+    expect(document.getElementById("workbench-outcome-label").textContent).toBe("DIRECT PUBLISH BLOCKED");
+    expect(document.querySelector('[data-agent="reviewer_agent"]').classList.contains("is-selected")).toBe(true);
+    expect(document.querySelector('[data-agent="ops_agent"]').classList.contains("is-muted")).toBe(true);
+    expect(document.getElementById("workbench-proof-events").textContent).toContain("AUDIT_LOG_WRITTEN");
 
     const inspectorText = document.getElementById("json-inspector").textContent;
     expect(inspectorText).toContain('"selected_agent": "reviewer_agent"');

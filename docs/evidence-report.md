@@ -1,6 +1,6 @@
 # Engineering Evidence Report
 
-Generated at: 2026-06-01 07:20:40 UTC
+Generated at: 2026-06-01 07:36:01 UTC
 
 Overall status: **PASS**
 
@@ -10,7 +10,7 @@ This report is a command-backed project evidence artifact. It focuses on reprodu
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Python unit and integration tests | PASS | `python -m pytest -q` -> 460 tests passed in 12.03s; warnings: 0. |
+| Python unit and integration tests | PASS | `python -m pytest -q` -> 460 tests passed in 11.81s; warnings: 0. |
 | Golden replay evals | PASS | `python -m core.eval.runner --suite golden` -> 50/50 replay cases passed; failed: 0. |
 | Benchmark dry-run selection | PASS | `python scripts/generate_benchmark.py --dry-run --max-cases 4` -> 4 benchmark cases selected: benchmark_dm_actor_runtime_turn (1 steps), benchmark_gatekeeper_generation_turn (1 steps), benchmark_mechanics_physics_turn (1 steps), benchmark_physical_action_turn (1 steps). |
 | Web UI tests | PASS | `npm test` -> 286/286 Jest tests passed. |
