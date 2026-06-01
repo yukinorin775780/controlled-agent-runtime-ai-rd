@@ -1,20 +1,59 @@
-# Controlled Agent Sim Runtime
+# Controlled Agent Runtime Workbench
 
 [中文 README](README.zh-CN.md)
 
-A bounded LLM agent runtime for building, operating, and evaluating multi-agent workflows through an inspectable Web workbench.
+This project is a working runtime for controlling LLM agents before they call tools or mutate state.
 
-The Web workbench presents business-shaped tool orchestration traces: a user intent enters the runtime, the Director selects a route and target agent, `ActorView` builds a scoped prompt/tool/data view, policy gates validate the tool call, and `EventDrain` commits typed audit events. Hazard Lab remains the compact scenario preview used to stress-test hidden state, delegated actions, memory, and deterministic commits.
+It answers a practical engineering question: when a user gives an intent, how do we decide which agent should handle it, what that agent is allowed to see, which tools it can call, whether the tool call is safe, and how the result is committed in an auditable way?
+
+The browser workbench makes that flow visible:
+
+```text
+Intent -> Director Router -> Scoped AgentView -> Agent Runtime -> Tool Gate -> EventDrain -> Trace / State Diff
+```
+
+Hazard Lab is kept as a compact stateful scenario behind the workbench. It is not the main product surface; it is a stress test for hidden state, multi-agent coordination, memory, and deterministic commits.
+
+## What To Look At
+
+The three screenshots below are generated from the same runtime with different URL presets. They show that the system is not just changing text labels: different agents receive different tool permissions, masked fields, gate decisions, and committed events.
+
+| Workflow | Runtime behavior |
+| --- | --- |
+| Ops Agent | Can publish a policy patch only after eval and schema checks pass. |
+| Research Agent | Can search and retrieve knowledge-base context, but has no deploy/publish tools. |
+| Reviewer Agent | Can read CI/eval status and write an audit log, but direct publish is blocked. |
+
+![Ops Agent workflow: tool call approved after eval gate](docs/assets/runtime-workflow-ops.png)
+
+![Research Agent workflow: read-only retrieval scope](docs/assets/runtime-workflow-research.png)
+
+![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
+
+## Why This Matters
+
+Many agent demos let the model see too much context and imply state changes through generated text. That is hard to trust in a real workflow.
+
+This runtime separates the responsibilities:
+
+- `Director Router` chooses the route and target agent before generation.
+- `Scoped AgentView` builds the agent-specific prompt slice, allowed tools, visible fields, and memory scope.
+- `Agent Runtime` prepares a typed action or tool candidate.
+- `Tool Gate` validates role permission, schema, and preconditions.
+- `EventDrain` commits typed events into durable state so the result is replayable and inspectable.
+- The Web workbench exposes the trace, payload summary, state diff, and committed events.
+
+The reusable idea is bounded autonomy: the LLM can interpret intent and propose actions, but the runtime owns context boundaries, tool permissions, state mutation, and regression checks.
 
 ## Engineering Evidence
 
-This repository is evaluated through command-backed evidence rather than screenshots or subjective demo claims.
+Run the reproducible evidence script:
 
 ```bash
 python scripts/generate_evidence_report.py
 ```
 
-Latest local evidence:
+Latest local result:
 
 | Gate | Result |
 | --- | --- |
@@ -23,152 +62,72 @@ Latest local evidence:
 | Web UI tests | `286 passed` |
 | Benchmark dry-run | `4 cases selected` |
 
-See [Engineering Evidence Report](docs/evidence-report.md) for the reproducible report and the runtime claims it backs.
+See [Engineering Evidence Report](docs/evidence-report.md) for the generated report.
 
-## Runtime Workflow Examples
-
-These screenshots are generated from the same Web workbench using URL presets. They are visual entry points for the runtime behavior; the command-backed tests and evals above remain the regression evidence.
-
-| Agent workflow | What the screenshot demonstrates |
-| --- | --- |
-| Ops Agent | A policy publish intent is routed to the Ops agent, receives only the Ops tool allowlist, passes the policy gate, and commits `TOOL_CALL_APPROVED`. |
-| Research Agent | A ticket triage intent is routed to a read-only Research scope with retrieval tools while deploy controls remain masked. |
-| Reviewer Agent | A release audit intent is routed to Reviewer scope; direct publish is blocked and an audit event is still committed. |
-
-![Ops Agent workflow: policy publish tool call approved](docs/assets/runtime-workflow-ops.png)
-
-![Research Agent workflow: read-only ticket triage scope](docs/assets/runtime-workflow-research.png)
-
-![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
-
-## Runtime Capabilities
-
-| Capability | Project evidence |
-| --- | --- |
-| 0-to-1 delivery | FastAPI service, LangGraph runtime, Web workbench, eval runner, benchmark tooling, and a runnable scenario preview live in one repo. |
-| Agent workflow control | LLM-facing nodes interpret intent and generate expression, while deterministic systems own tool gates, state mutation, audit events, and replay. |
-| Web full stack | `server.py` exposes `/api/chat` and `/api/state`; `web_ui/` renders the Runtime Workbench, Director Timeline, payload inspector, state diff, and scenario preview. |
-| Runtime boundaries | `ActorView`, tool allowlists, masked fields, `DomainEvent`, `EventDrain`, memory services, graph routing, and visibility policy form explicit contracts instead of ad hoc prompts. |
-| Delivery quality | `pytest`, golden replay evals, UI tests, and benchmark dry-runs provide regression gates that can run without live model calls. |
-
-Project notes:
-
-- [Case Study](docs/case-study.md)
-- [Demo Walkthrough](docs/demo-walkthrough.md)
-- [Runtime Architecture](docs/runtime-architecture.md)
-- [Engineering Evidence Report](docs/evidence-report.md)
-
-## Why This Exists
-
-LLM agents become useful in production only when their freedom is bounded by explicit runtime contracts. This project separates:
-
-- **LLMs** for intent interpretation, agent expression, and final response generation.
-- **Deterministic systems** for tool gates, permission checks, inventory, memory writes, world flags, damage, and final state commits.
-- **Typed events** for all state mutation through `DomainEvent` and `EventDrain`.
-- **Actor-scoped views** so each agent receives only authorized world state.
-- **Golden replay evals** to keep agent behavior, visibility, and event application regression-testable.
-- **Operator observability** so route decisions, payloads, state diffs, and benchmark results can be inspected rather than inferred.
-
-## System Highlights
-
-- **Agent workflow chain:** business intent flows through routing, scoped AgentView, actor runtime, policy/tool gate, event drain, generation, and UI feedback as inspectable stages.
-- **Scoped AgentView:** `ActorView` filters prompt slices, allowed tools, visible fields, peer state, visible history, and private memory before an agent can respond or call tools.
-- **State safety boundary:** LLM output can propose intent, speech, and tool candidates, but authoritative changes land through deterministic event handlers.
-- **Multi-agent runtime:** the workbench presets model Ops, Research, and Reviewer agents with distinct context scopes, tool permissions, memories, and risk models instead of one generic assistant voice.
-- **Replayable evals:** YAML golden cases validate routing, memory isolation, item transfer, hazard handling, and scenario outcomes without live model calls.
-- **Performance visibility:** benchmark tooling compares graph-routed scoped prompts against a naive full-state agent baseline.
-- **Operator-facing UI:** the browser workbench shows business-shaped tool orchestration, scoped AgentView, payload inspection, state diffs, Director Timeline, and a scenario preview.
-
-## Workbench Scenario
-
-The default Web surface is an Agent Runtime Workbench:
-
-1. A business intent requests an agent to call a tool, such as `publish_policy_patch`.
-2. Director Router classifies the route, target agent, and fallback.
-3. Scoped AgentView limits prompt context, data fields, and tool allowlists by role.
-4. Agent Runtime prepares a typed tool candidate.
-5. Policy / Tool Gate validates schema, permission, and preconditions.
-6. EventDrain commits `TOOL_CALL_APPROVED`, blocked actions, and audit events.
-
-Hazard Lab is still included as the compact scenario preview behind the workbench. Its purpose is to keep the runtime grounded in a stateful environment while the primary review surface focuses on agent orchestration.
-
-## Architecture
-
-```mermaid
-flowchart TD
-    Player["Business Intent / Web UI"] --> Service["GameService"]
-    Service --> Graph["LangGraph Runtime"]
-    Graph --> Input["Input Node"]
-    Input --> Router["Director Router"]
-    Router --> Mechanics["Policy / Tool Gate"]
-    Router --> Lore["Lore / Retrieval"]
-    Router --> ActorRuntime["Actor Runtime"]
-    Router --> Generation["LLM Generation"]
-    ActorRuntime --> ActorView["Scoped ActorView"]
-    Generation --> ActorView
-    Mechanics --> Events["DomainEvent / Tool Audit"]
-    Lore --> Events
-    ActorRuntime --> Events
-    Events --> Drain["EventDrain"]
-    Drain --> State["GameState Checkpoint"]
-    State --> Memory["MemoryService"]
-    State --> Eval["Golden Eval / Telemetry"]
-    State --> UI["Workbench / State Diff / Director Timeline"]
-```
-
-## Quick Start
+## Run It Locally
 
 ```bash
 pip install -r requirements.txt
 python server.py
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8000/web_ui/?map_id=hazard_lab
-```
-
-For a clean local demo session:
+Open the workbench:
 
 ```text
 http://127.0.0.1:8000/web_ui/?session_id=demo_run_001&map_id=hazard_lab&qa_no_idle=1
 ```
 
-## Tests And Evals
+Reproduce the screenshot presets:
+
+```text
+http://127.0.0.1:8000/web_ui/?session_id=workflow_ops&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=policy_publish
+http://127.0.0.1:8000/web_ui/?session_id=workflow_research&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=ticket_triage
+http://127.0.0.1:8000/web_ui/?session_id=workflow_reviewer&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=release_audit
+```
+
+## Test And Evaluation Commands
 
 ```bash
 pytest -q
 python -m core.eval.runner --suite golden
 python scripts/generate_benchmark.py --dry-run --max-cases 4
-python scripts/generate_evidence_report.py
+npm test
 make check
 ```
 
-Real LLM benchmark:
+## Architecture
 
-```bash
-python scripts/generate_benchmark.py --max-cases 4
+```mermaid
+flowchart TD
+    Intent["User Intent"] --> Service["FastAPI / GameService"]
+    Service --> Graph["LangGraph Runtime"]
+    Graph --> Router["Director Router"]
+    Router --> View["Scoped AgentView"]
+    View --> Agent["Agent Runtime"]
+    Agent --> Candidate["Typed Tool Candidate"]
+    Candidate --> Gate["Policy / Tool Gate"]
+    Gate --> Events["DomainEvent / Tool Audit"]
+    Events --> Drain["EventDrain"]
+    Drain --> State["Checkpointed Runtime State"]
+    State --> UI["Workbench Trace / Payload / State Diff"]
+    State --> Eval["Golden Replay / Benchmark"]
 ```
 
 ## Repository Map
 
 ```text
-core/application/      GameService orchestration boundary
-core/graph/            LangGraph state machine, nodes, and routing
+core/application/      service boundary shared by API, UI, evals, and benchmarks
+core/graph/            LangGraph state machine, routing, and node orchestration
 core/actors/           ActorView, ActorRuntime, registry, visibility contracts
-core/events/           DomainEvent models, apply path, event store
-core/memory/           Memory scopes, retrieval, distillation, service layer
-core/systems/          dice, mechanics, world init, pathfinding, inventory
-core/eval/             Golden replay runner, assertions, telemetry, reports
-evals/golden/          deterministic regression cases
-evals/benchmark/       real LLM benchmark cases
-web_ui/                Runtime Workbench, scenario preview, and Director Timeline
-docs/                  architecture, case study, demo notes, evidence report
+core/events/           typed events, apply path, event store
+core/memory/           scoped memory, retrieval, distillation, service layer
+core/eval/             golden replay runner, assertions, telemetry, reports
+evals/golden/          deterministic replay cases
+evals/benchmark/       benchmark cases for model-backed runs
+web_ui/                Runtime Workbench, Director Timeline, payload inspector, state diff
+docs/                  walkthrough, architecture, case study, evidence report
 ```
 
-## Scope
+## Project Boundary
 
-This is not a model-training project and not a content-volume showcase. It is a working agent infrastructure prototype focused on bounded autonomy: scoped tool/prompt context, memory isolation, deterministic state commits, replayable evaluation, and observable runtime behavior.
-
-The scenario preview is intentionally compact because its purpose is to make AI engineering decisions visible: what the agent can see, which tools it can call, which route was selected, which deterministic system committed state, and how the result is tested.
+This is not a model-training project and not a content-volume showcase. The scenario preview is intentionally small. The project focuses on the runtime infrastructure needed to make agent behavior bounded, observable, replayable, and testable.
