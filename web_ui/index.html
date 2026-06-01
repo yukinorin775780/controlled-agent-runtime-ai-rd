@@ -3,18 +3,82 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Controlled Agent Sim Runtime | Hazard Lab</title>
-  <meta name="description" content="Controlled Agent Sim Runtime — Hazard Lab Demo" />
+  <title>Controlled Agent Runtime Workbench</title>
+  <meta name="description" content="Controlled Agent Runtime Workbench" />
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="./style.css?v=20260522_act2_trap_semantics_v10" />
 </head>
 <body>
   <div id="main-layout" class="main-layout">
 
-  <!-- ═══════════════════════════════════════════════════
-       PRIMARY: 2.5D Explorable Map (fills center/left)
-       ═══════════════════════════════════════════════════ -->
-  <section id="game-viewport" class="game-viewport" aria-label="游戏视口">
+  <section id="game-viewport" class="game-viewport" aria-label="Agent Runtime Workbench">
+    <section id="runtime-workbench" class="runtime-workbench" aria-label="Agent Runtime Workbench">
+      <div class="workbench-header">
+        <div>
+          <p class="workbench-eyebrow">Controlled Agent Runtime</p>
+          <h1>Agent Runtime Workbench</h1>
+        </div>
+        <div class="workbench-status">
+          <span>pre-LLM trace</span>
+          <strong>Scoped Tool Orchestration</strong>
+        </div>
+      </div>
+
+      <div class="workbench-grid">
+        <section class="workbench-panel workbench-panel--driver">
+          <div class="workbench-panel-head">
+            <span>01</span>
+            <h2>Intent Driver</h2>
+          </div>
+          <div class="workbench-command-list">
+            <button type="button" class="workbench-command is-active" data-workbench-preset="policy_publish">
+              <strong>Policy Publish</strong>
+              <span>Ops Agent · eval_summary -> publish_policy_patch</span>
+            </button>
+            <button type="button" class="workbench-command" data-workbench-preset="ticket_triage">
+              <strong>Ticket Triage</strong>
+              <span>Research Agent · ticket_search -> kb_lookup</span>
+            </button>
+            <button type="button" class="workbench-command" data-workbench-preset="release_audit">
+              <strong>Release Audit</strong>
+              <span>Reviewer Agent · ci_status -> audit_log_write</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="workbench-panel workbench-panel--flow">
+          <div class="workbench-panel-head">
+            <span>02</span>
+            <h2>Runtime Flow</h2>
+          </div>
+          <div class="workbench-flow" aria-label="Runtime flow">
+            <div><strong>Intent</strong><small>业务意图</small></div>
+            <div><strong>Router</strong><small>路由分类</small></div>
+            <div><strong>Scoped View</strong><small>上下文/工具白名单</small></div>
+            <div><strong>Tool Gate</strong><small>鉴权/参数校验</small></div>
+            <div><strong>EventDrain</strong><small>审计提交</small></div>
+          </div>
+        </section>
+
+        <section class="workbench-panel workbench-panel--scope">
+          <div class="workbench-panel-head">
+            <span>03</span>
+            <h2>Scoped AgentView</h2>
+          </div>
+          <div class="scope-table">
+            <div><strong>Ops Agent</strong><span>eval_summary, publish_policy_patch</span><small>masked: raw PII, billing token</small></div>
+            <div><strong>Research Agent</strong><span>ticket_search, kb_lookup</span><small>masked: deploy controls</small></div>
+            <div><strong>Reviewer Agent</strong><span>ci_status, audit_log_write</span><small>masked: direct publish</small></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <div class="scenario-preview-label">
+      <span>Scenario Preview</span>
+      <strong>Hazard Lab state system</strong>
+    </div>
+
     <div id="map-stage" class="map-stage" aria-label="2.5D 战术地图">
       <div id="map-container" class="map-container"></div>
     </div>
@@ -217,7 +281,7 @@
       <span id="interaction-hint" class="interaction-hint hint-hidden"></span>
       <div class="bottom-dock-input">
         <label class="sr-only" for="dock-input">输入指令</label>
-        <input type="text" id="dock-input" class="dock-input" placeholder="输入对白或行动指令…" autocomplete="off" />
+        <input type="text" id="dock-input" class="dock-input" placeholder="输入业务意图，例如：让 Ops Agent 校验知识库变更并调用发布工具" autocomplete="off" />
         <button type="button" id="dock-send-btn" class="dock-send-btn">发送</button>
       </div>
     </div>
@@ -232,13 +296,13 @@
 
   <aside id="director-trace-panel" class="xray-panel xray-panel--scroll-safe" aria-label="Director Trace Panel">
     <header class="xray-header">
-      <p>AI Director Pipeline</p>
-      <h2>Director Trace <span>Logic Tracer</span></h2>
+      <p>Agent Runtime Pipeline</p>
+      <h2>Runtime Trace <span>Tool Orchestration</span></h2>
       <div class="director-trace-brief" aria-live="polite">
-        <span id="director-trace-mode" class="director-trace-mode">LOCAL EXPLORATION</span>
-        <span id="director-trace-summary" class="director-trace-summary">WASD and hover stay local. No narrative route is active.</span>
+        <span id="director-trace-mode" class="director-trace-mode">WORKBENCH READY</span>
+        <span id="director-trace-summary" class="director-trace-summary">Select a business intent to inspect routing, scoped context, tool gates, and commits.</span>
       </div>
-      <div id="director-state-indicator" class="director-state-indicator director-state--idle">Director Idle · Local Exploration</div>
+      <div id="director-state-indicator" class="director-state-indicator director-state--idle">Runtime Idle · Workbench Ready</div>
     </header>
 
     <section class="xray-section runtime-evidence" aria-label="Runtime Evidence">
@@ -252,16 +316,16 @@
           <small>FastAPI · LangGraph · Web UI · evals · benchmark</small>
         </div>
         <div>
-          <strong>Runtime Safety</strong>
-          <small>ActorView filters context before agents respond</small>
+          <strong>Scoped AgentView</strong>
+          <small>prompt slice · allowed tools · masked fields</small>
         </div>
         <div>
-          <strong>State Ownership</strong>
-          <small>DomainEvent and EventDrain commit world changes</small>
+          <strong>Tool Gate</strong>
+          <small>schema · permission · precondition checks</small>
         </div>
         <div>
-          <strong>Regression Gate</strong>
-          <small>pytest, golden replay, and benchmark dry-run</small>
+          <strong>Audit Commit</strong>
+          <small>DomainEvent and EventDrain write traceable state</small>
         </div>
       </div>
     </section>
@@ -272,12 +336,13 @@
         <h3>Director Timeline</h3>
       </div>
       <ol id="director-node-timeline" class="node-timeline">
-        <li data-node="input_processing"><strong>Input</strong><small>玩家叙事触发</small><span class="node-timing">--ms</span></li>
-        <li data-node="dm_analysis"><strong>AI Director</strong><small>意图识别 · 剧情路由</small><span class="node-timing">--ms</span></li>
-        <li data-node="mechanics_processing"><strong>Mechanics</strong><small>检定 · 物理 · LoS · 物品</small><span class="node-timing">--ms</span></li>
-        <li data-node="dialogue_processing"><strong>Actor Runtime</strong><small>队友/NPC 发言与事件</small><span class="node-timing">--ms</span></li>
-        <li data-node="event_drain"><strong>EventDrain</strong><small>好感 · 记忆 · 物品 · 状态写回</small><span class="node-timing">--ms</span></li>
-        <li data-node="generation"><strong>Narration</strong><small>最终叙事输出</small><span class="node-timing">--ms</span></li>
+        <li data-node="input_processing"><strong>Intent Input</strong><small>业务意图进入运行时</small><span class="node-timing">--ms</span></li>
+        <li data-node="dm_analysis"><strong>Director Router</strong><small>意图/角色/工具路由</small><span class="node-timing">--ms</span></li>
+        <li data-node="actor_view"><strong>Scoped AgentView</strong><small>prompt slice · allowed tools</small><span class="node-timing">--ms</span></li>
+        <li data-node="dialogue_processing"><strong>Agent Runtime</strong><small>动作候选与参数构造</small><span class="node-timing">--ms</span></li>
+        <li data-node="mechanics_processing"><strong>Policy / Tool Gate</strong><small>鉴权 · schema · 前置条件</small><span class="node-timing">--ms</span></li>
+        <li data-node="event_drain"><strong>EventDrain</strong><small>DomainEvent · 审计状态写回</small><span class="node-timing">--ms</span></li>
+        <li data-node="generation"><strong>Output Projection</strong><small>最终响应与可观测证据</small><span class="node-timing">--ms</span></li>
       </ol>
     </section>
 
@@ -288,14 +353,14 @@
       </div>
       <div class="xray-meter-row">
         <div class="xray-meter-label">
-          <span id="patience-label">耐心 Patience</span>
+          <span id="patience-label">Policy Confidence</span>
           <strong id="patience-value">--</strong>
         </div>
         <div class="xray-meter"><div id="patience-bar" class="xray-meter-fill xray-meter-fill--gold"></div></div>
       </div>
       <div class="xray-meter-row">
         <div class="xray-meter-label">
-          <span id="fear-label">恐惧 Fear</span>
+          <span id="fear-label">Tool Risk</span>
           <strong id="fear-value">--</strong>
         </div>
         <div class="xray-meter"><div id="fear-bar" class="xray-meter-fill xray-meter-fill--blood"></div></div>
@@ -322,6 +387,7 @@
   <script src="./ui-event-adapter.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./director-trace.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./state-diff-renderer.js?v=20260522_act2_trap_semantics_v10" defer></script>
+  <script src="./workbench.js?v=20260601_runtime_workbench" defer></script>
   <script src="./demo-script-runner.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./input-controller.js?v=20260522_act2_trap_semantics_v10" defer></script>
   <script src="./hud-renderers.js?v=20260522_act2_trap_semantics_v10" defer></script>

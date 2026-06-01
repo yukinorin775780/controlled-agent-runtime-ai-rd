@@ -23,22 +23,22 @@ make check
 
 ## Walkthrough
 
-1. Show local movement and the shared simulation state.
-2. Ask what is unusual in the corridor; Scout surfaces a hidden trap through actor-scoped perception.
-3. Delegate trap disarm to Scout; the result lands in deterministic state, not just dialogue.
-4. Read lab notes and the incident log; Analyst updates shared knowledge.
-5. Ask how to handle the Gatekeeper; agents disagree based on role and visible context.
-6. Use earlier evidence to resolve the Gatekeeper encounter and open the exit.
+1. Open the Agent Runtime Workbench and select `Policy Publish`.
+2. Show the business intent in the bottom input: Ops Agent validates a knowledge-base change and calls `publish_policy_patch`.
+3. Walk through Runtime Flow: Intent -> Router -> Scoped View -> Tool Gate -> EventDrain.
+4. Open Payload Inspector and point out `selected_agent`, `allowed_tools`, `masked_fields`, `policy_gate`, `proposed_tool_call`, and `domain_events`.
+5. Switch to `Release Audit` and show how the same flow can block direct publish while still committing an audit event.
+6. Mention that the map behind the workbench is a scenario preview used to keep the runtime grounded in a stateful environment.
 
 ## Technical Points To Show
 
 - The Web UI, API, eval runner, and benchmark scripts all use the same `GameService` boundary.
-- `ActorView` prevents each agent from seeing unrestricted global state.
-- LLM-facing nodes can suggest intent and expression, while `DomainEvent` and `EventDrain` own authoritative state mutation.
-- Golden replay cases validate routing, visibility isolation, memory behavior, item transfer, and scenario outcomes without requiring live model calls.
+- `ActorView` is an execution-context boundary: different agents receive different prompt slices, tool allowlists, visible fields, and memory scopes.
+- LLM-facing nodes can suggest intent, expression, and typed tool candidates, while `DomainEvent` and `EventDrain` own authoritative state mutation and audit commits.
+- Golden replay cases validate routing, visibility isolation, memory behavior, item transfer, tool-like state transitions, and scenario outcomes without requiring live model calls.
 
 Closing line:
 
 ```text
-This is a controlled agent runtime: LLMs provide intent and expression, while deterministic systems own perception boundaries, state mutation, replay, and observability.
+The workbench shows what happens before and after model/tool execution: intent routing, scoped AgentView, policy gates, typed events, and observable commits.
 ```

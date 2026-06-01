@@ -2102,7 +2102,7 @@ describe("web_ui/app.js UI bindings", () => {
     expect(api.els.xrayToggleBtn.getAttribute("aria-expanded")).toBe("false");
   });
 
-  test("test_director_timeline_local_movement_renders_compact_idle_trace", async () => {
+  test("test_director_timeline_idle_trace_uses_workbench_copy", async () => {
     spyOnFetch().mockResolvedValue(mockResponse({}));
     await bootAppForTest("http://localhost/?qa_test=1");
 
@@ -2119,8 +2119,8 @@ describe("web_ui/app.js UI bindings", () => {
 
     expect(window.ControlledAgentDirectorTrace.getState()).toBe("idle");
     expect(panel.classList.contains("director-trace--idle")).toBe(true);
-    expect(mode.textContent).toBe("LOCAL EXPLORATION");
-    expect(summary.textContent).toContain("WASD");
+    expect(mode.textContent).toBe("WORKBENCH READY");
+    expect(summary.textContent).toContain("business intent");
     expect(visibleNodes.map((node) => node.dataset.node)).toEqual(["player_input"]);
   });
 
@@ -2373,7 +2373,7 @@ describe("web_ui/app.js UI bindings", () => {
 
   test("test_qa_map_source_badge_only_visible_for_json_source", async () => {
     spyOnFetch().mockResolvedValue(mockResponse({}));
-    const api = await bootAppForTest("http://localhost/?qa_test=1");
+    const api = await bootAppForTest("http://localhost/?qa_test=1&qa_map_debug=1");
     const map = JSON.parse(fs.readFileSync(REAL_MAP_JSON_PATH, "utf8"));
     const normalized = window.ControlledAgentTiledAdapter.normalizeTiledMap(map);
     api.applyNormalizedMap(normalized, { source: "json" });

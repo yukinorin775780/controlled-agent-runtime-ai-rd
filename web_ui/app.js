@@ -1793,7 +1793,7 @@
   }
 
   function ensureMapSourceBadge() {
-    if (!IS_QA_MODE) return null;
+    if (!QA_MAP_DEBUG) return null;
     if (state.mapSourceBadge && document.body.contains(state.mapSourceBadge)) return state.mapSourceBadge;
     const badge = document.createElement("div");
     badge.id = "qa-map-source-badge";

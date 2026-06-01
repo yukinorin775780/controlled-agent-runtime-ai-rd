@@ -186,9 +186,9 @@ def _claim_table() -> str:
         [
             "| Claim | What proves it | Relevant code/tests |",
             "| --- | --- | --- |",
-            "| Scoped perception | Agents receive actor-specific views rather than raw global state. | `core/actors/builders.py`, `core/actors/visibility.py`, `tests/test_actor_view_builder.py`, `tests/test_visibility_rules.py` |",
+            "| Scoped AgentView | Agents receive role-specific prompt/data/tool views rather than raw global state. | `core/actors/builders.py`, `core/actors/visibility.py`, `tests/test_actor_view_builder.py`, `tests/test_visibility_rules.py` |",
             "| Deterministic state mutation | LLM-facing nodes can propose intent, while typed events and event drain own authoritative state writes. | `core/events/models.py`, `core/events/apply.py`, `core/graph/nodes/event_drain.py`, `tests/test_event_drain.py`, `tests/test_actor_invocation_node.py` |",
-            "| Replayable behavior | Golden YAML cases validate routing, visibility, memory, item transfer, traps, and scenario endings without live model calls. | `evals/golden/`, `core/eval/runner.py`, `tests/test_golden_suite_smoke.py` |",
+            "| Replayable behavior | Golden YAML cases validate routing, visibility, memory, state transfer, hidden-state handling, and scenario outcomes without live model calls. | `evals/golden/`, `core/eval/runner.py`, `tests/test_golden_suite_smoke.py` |",
             "| Operator observability | Runtime decisions and state changes are inspectable through route trace, payload summaries, and state diff. | `web_ui/director-trace.js`, `web_ui/state-diff-renderer.js`, `web_ui/tests/app.test.js` |",
             "| Full-stack delivery | The same service path powers API, browser UI, eval runner, and benchmark tooling. | `server.py`, `core/application/game_service.py`, `web_ui/`, `scripts/generate_benchmark.py` |",
         ]
@@ -220,11 +220,11 @@ This report is a command-backed project evidence artifact. It focuses on reprodu
 
 ## Why This Matters
 
-This project does not claim to be a complete game or a model-training system. It demonstrates that LLM agents can be placed inside an engineering runtime with scoped context, deterministic state commits, replayable evals, and observable execution traces.
+This project does not claim to be a content-complete product or a model-training system. It demonstrates that LLM agents can be placed inside an engineering runtime with scoped context, tool gates, deterministic state commits, replayable evals, and observable execution traces.
 
 The key engineering claim is:
 
-> The game-like scenario is the stress test. The reusable asset is the controlled Agent runtime and its quality gate.
+> The scenario preview is the stress test. The reusable asset is the controlled Agent runtime and its quality gate.
 
 ## Reproduce
 

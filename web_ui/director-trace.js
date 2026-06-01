@@ -16,13 +16,13 @@
   const INSTANCE_ID = String(Date.now()) + ":" + Math.random().toString(36).slice(2);
 
   const CHAIN = Object.freeze([
-    ["player_input", "Player Intent", "WASD stays local; narrative actions enter the route."],
-    ["dm_router", "DM Router", "Classifies the action, target, and route."],
-    ["actor_view_filter", "ActorView", "Filters what this actor is allowed to know."],
-    ["actor_runtime", "Actor Runtime", "Runs companion memory, voice, and party coordination."],
-    ["domain_event", "Rules / Mechanics", "Resolves traps, locks, items, checks, or combat effects."],
-    ["event_drain", "EventDrain", "Commits inventory, flags, memory, affection, and status."],
-    ["ui_events", "UI Feedback", "Renders bark, cards, overlays, and state diff."],
+    ["player_input", "Intent Input", "Business intent enters the runtime boundary."],
+    ["dm_router", "Director Router", "Classifies intent, target agent, tool route, and fallback."],
+    ["actor_view_filter", "Scoped AgentView", "Builds role-specific prompt, tool, and data scope."],
+    ["actor_runtime", "Agent Runtime", "Selects the action candidate and typed tool arguments."],
+    ["domain_event", "Policy / Tool Gate", "Validates schema, permission, and execution preconditions."],
+    ["event_drain", "EventDrain", "Commits typed state, audit events, and durable memory."],
+    ["ui_events", "Output Projection", "Renders response, trace evidence, and state diff."],
   ]);
 
   const NODE_DISPLAY = Object.freeze(
@@ -142,8 +142,8 @@
 
   function updateTraceBrief(mode, summary) {
     cacheEls();
-    if (els.mode) els.mode.textContent = String(mode || "LOCAL EXPLORATION").toUpperCase();
-    if (els.summary) els.summary.textContent = summary || "WASD and hover stay local. No narrative route is active.";
+    if (els.mode) els.mode.textContent = String(mode || "WORKBENCH READY").toUpperCase();
+    if (els.summary) els.summary.textContent = summary || "Select a business intent to inspect routing, scoped context, tool gates, and commits.";
   }
 
   function setPanelMode(mode) {
@@ -289,6 +289,10 @@
     if (types.has("boss_strategy") || /\[Boss方案\]|boss_strategy/i.test(blob)) parts.push("boss_strategy");
     if (types.has("boss_route") || /\[Boss解决\]|\[偷钥匙失败\]|act4_(?:negotiation_success|scout_steal_key_success|assault_success|heavy_iron_key_obtained|final_exit_opened)/i.test(blob)) parts.push("boss_route");
     if (types.has("poison_valve") || /\[毒气泄漏\]|act4_(?:poison_valve_triggered|lab_poison_leak|poison_valve_disabled)|poison_valve|potion_tank/i.test(blob)) parts.push("poison_valve");
+    if (types.has("policy_check")) parts.push("policy_check");
+    if (types.has("tool_call_approved")) parts.push("tool_call_approved");
+    if (types.has("tool_call_blocked")) parts.push("tool_call_blocked");
+    if (types.has("audit_event")) parts.push("audit_event");
     if (/\[秘密书房\]|act3_secret_study|cracked_wall|room_c_secret_study/i.test(blob)) parts.push("secret_study_discovery");
     const aff = blob.match(/affection[^\d+\-]*([+\-]\s*\d+)/i) || blob.match(/好感度?\s*([+\-]\s*\d+)/);
     if (aff) parts.push("affection " + aff[1].replace(/\s/g, ""));
@@ -316,6 +320,7 @@
     if (types.has("boss_strategy") || /\[Boss方案\]/i.test(blob)) out.push("Boss Strategy Card");
     if (types.has("boss_route") || /\[Boss解决\]|\[偷钥匙失败\]/i.test(blob)) out.push("Boss Route Card");
     if (types.has("poison_valve") || /\[毒气泄漏\]|poison_valve|potion_tank/i.test(blob)) out.push("Poison Valve Card");
+    if (types.has("tool_call_approved") || types.has("tool_call_blocked") || types.has("policy_check")) out.push("Tool Gate Card");
     if (/\[秘密书房\]|act3_secret_study|cracked_wall|room_c_secret_study/i.test(blob)) out.push("Secret Study Toast");
     if (types.has("demo_cleared") || /demo_cleared|DEMO CLEARED/i.test(blob)) out.push("Demo Banner");
     if (types.has("trap_discovered") || types.has("trap_triggered") || /\[陷阱感知\]|\[陷阱解除\]|\[毒气陷阱\]/i.test(blob)) out.push("Trap HUD");
@@ -334,12 +339,18 @@
     const blob = textBlob(payload, opts.userLine, opts.intent);
     if (!blob.trim() && !events.length) {
       return {
-        mode: "LOCAL EXPLORATION",
-        summary: "WASD and hover stay local. No narrative route is active.",
+        mode: "WORKBENCH READY",
+        summary: "Select a business intent to inspect routing, scoped context, tool gates, and commits.",
       };
     }
     if (hasEventType(payload, events, ["demo_cleared"]) || /demo_cleared|DEMO CLEARED|act4_final_exit_opened/i.test(blob)) {
       return { mode: "PHYSICS / EVENTDRAIN", summary: "Heavy iron key opened the final exit." };
+    }
+    if (hasEventType(payload, events, ["tool_call_approved"])) {
+      return { mode: "TOOL ORCHESTRATION", summary: "Scoped AgentView and policy gate approved the tool call." };
+    }
+    if (hasEventType(payload, events, ["tool_call_blocked"])) {
+      return { mode: "TOOL ORCHESTRATION", summary: "Policy gate blocked the requested tool call before execution." };
     }
     if (hasEventType(payload, events, ["boss_route"]) || /\[Boss解决\]|\[偷钥匙失败\]|act4_(?:negotiation_success|scout_steal_key_success|assault_success|heavy_iron_key_obtained)/i.test(blob)) {
       return { mode: "NARRATIVE TURN", summary: "Boss route resolved and world state changed." };
@@ -421,6 +432,10 @@
       || /\[站队\]|\[抉择\]|gatekeeper_mercy|gatekeeper_spared|gatekeeper_executed|mercy_resolved/i.test(blob);
     const hasBossSignal = types.some((type) => ["boss_intro", "boss_strategy", "boss_route", "poison_valve"].includes(type))
       || /\[Boss Encounter\]|\[Boss方案\]|\[Boss解决\]|\[偷钥匙失败\]|\[毒气泄漏\]|act4_/i.test(blob);
+    const hasToolSignal = types.some((type) => ["tool_call_approved", "tool_call_blocked", "policy_check", "audit_event"].includes(type));
+    if (hasToolSignal) {
+      return ["player_input", "dm_router", "actor_view_filter", "actor_runtime", "domain_event", "event_drain", "ui_events"];
+    }
     const needsParty = /gatekeeper|scout|dialogue|party|好感|affection|combat|initiative|台词|对话/i.test(blob)
       || types.includes("trap_insight")
       || types.includes("party_stance")
@@ -449,13 +464,13 @@
     const uiSummary = summarizeUi(events, blob);
     const inputSummary = summarizeInput(opts.userLine, opts.intent, payload);
     const details = {
-      player_input: { explanation: "Player action enters the director only for narrative turns.", input: inputSummary, output: String(opts.intent || "routed").toUpperCase() || "routed" },
-      dm_router: { explanation: "Classified intent, target, fallback, and route.", input: inputSummary, output: /fallback/i.test(blob) ? "fallback selected" : "route selected" },
-      actor_view_filter: { explanation: "Applied memory isolation and actor-visible world slice.", input: "world + actor scope", output: /memory|记忆|actor_private/i.test(blob) ? "ActorView private memory" : "visible slice" },
-      actor_runtime: { explanation: "Generated companion/NPC response or party coordination.", input: "filtered ActorView", output: /gatekeeper|scout|party|dialogue|对话|台词/i.test(blob) ? "Party Coordinator" : "actor runtime" },
-      domain_event: { explanation: "Resolved rules, checks, trap state, item movement, or route result.", input: "runtime decisions", output: domainSummary },
-      event_drain: { explanation: "Applied queued state changes to the world snapshot.", input: "pending events", output: /EventDrain|event_drain|pending_events|item|memory|affection|flag/i.test(blob) ? domainSummary : "state committed" },
-      ui_events: { explanation: "Projected engine results into HUD, bark, overlay, and diff.", input: "response/ui_events", output: uiSummary },
+      player_input: { explanation: "Business request enters the runtime boundary.", input: inputSummary, output: String(opts.intent || "routed").toUpperCase() || "routed" },
+      dm_router: { explanation: "Classified intent, target agent, fallback, and tool route.", input: inputSummary, output: /fallback/i.test(blob) ? "fallback selected" : "route selected" },
+      actor_view_filter: { explanation: "Applied scoped prompt, allowed tools, visible fields, and memory isolation.", input: "global state + role policy", output: /memory|记忆|actor_private/i.test(blob) ? "private memory + scoped view" : "scoped AgentView" },
+      actor_runtime: { explanation: "Selected an agent response or typed tool candidate under scope.", input: "filtered AgentView", output: /gatekeeper|scout|party|dialogue|对话|台词/i.test(blob) ? "Party Coordinator" : "agent runtime" },
+      domain_event: { explanation: "Validated policy, schema, preconditions, and deterministic side effects.", input: "runtime decisions", output: domainSummary },
+      event_drain: { explanation: "Committed queued state changes, durable memory, and audit events.", input: "pending events", output: /EventDrain|event_drain|pending_events|item|memory|affection|flag/i.test(blob) ? domainSummary : "state committed" },
+      ui_events: { explanation: "Projected runtime result into response, trace, and state diff.", input: "response/ui_events", output: uiSummary },
     };
     const types = new Set(eventTypes(payload, events));
     if (types.has("companion_guidance") || /\[队友建议\]/i.test(blob)) {
@@ -528,6 +543,21 @@
       details.event_drain.signal = "agent_signal";
       details.ui_events.signal = "agent_signal";
     }
+    if (types.has("tool_call_approved") || types.has("tool_call_blocked") || types.has("policy_check")) {
+      details.player_input.signal = "agent_signal";
+      details.dm_router.signal = "agent_signal";
+      details.actor_view_filter.signal = "agent_signal";
+      details.actor_runtime.signal = "agent_signal";
+      details.domain_event.signal = "agent_signal";
+      details.event_drain.signal = "agent_signal";
+      details.ui_events.signal = "agent_signal";
+      details.dm_router.output = "route=tool_orchestration";
+      details.actor_view_filter.output = "scoped tools + masked fields";
+      details.actor_runtime.output = "typed tool candidate";
+      details.domain_event.output = types.has("tool_call_blocked") ? "tool call blocked" : "tool call approved";
+      details.event_drain.output = "audit event committed";
+      details.ui_events.output = "operator trace + response";
+    }
     Object.keys(details).forEach((node) => Object.assign(details[node], timings[node] || { ms: null, estimated: true }));
     return details;
   }
@@ -539,13 +569,13 @@
     currentState = "idle";
     lastNodes = ["player_input"];
     setPanelMode("idle");
-    updateTraceBrief("LOCAL EXPLORATION", "WASD and hover stay local. No narrative route is active.");
-    updateStateIndicator("Director Idle · Local Exploration", "idle");
+    updateTraceBrief("WORKBENCH READY", "Select a business intent to inspect routing, scoped context, tool gates, and commits.");
+    updateStateIndicator("Runtime Idle · Workbench Ready", "idle");
     const details = {
       player_input: {
-        explanation: "Local movement is resolved client-side.",
-        input: "WASD / hover",
-        output: "no backend route",
+        explanation: "No active intent is being routed.",
+        input: "workbench idle",
+        output: "awaiting intent",
         ms: null,
         estimated: true,
       },
