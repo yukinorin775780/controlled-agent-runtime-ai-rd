@@ -2973,6 +2973,8 @@ textarea {
   }
 
   .runtime-workbench {
+    display: block;
+    overflow-y: auto;
     max-width: none;
     right: 12px;
     left: 12px;
@@ -2980,8 +2982,11 @@ textarea {
   }
 
   .workbench-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
+    display: block;
+  }
+
+  .workbench-panel {
+    margin-top: 12px;
   }
 
   .workbench-panel--driver {
