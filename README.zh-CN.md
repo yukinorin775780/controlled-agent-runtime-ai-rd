@@ -1,133 +1,48 @@
 # Controlled Agent Runtime Workbench
 
-[English README](README.md)
+[![checks](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd/actions/workflows/checks.yml/badge.svg)](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd/actions/workflows/checks.yml)
 
-这是一个用于约束 LLM Agent 调用工具和写入状态的工程运行时。
+## 出身与真实边界
 
-它解决的问题很直接：用户输入一个意图之后，系统如何决定由哪个 Agent 处理、这个 Agent 能看到什么、能调用哪些工具、工具调用是否安全、结果如何被审计和回放。
+本项目从 [BG3-LLM-Agent](https://github.com/yukinorin775780/BG3-LLM-Agent) 抽离，早期迭代历史保留在原仓库。[业务工作台](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd) 与 [仿真版](https://github.com/yukinorin775780/controlled-agent-sim-runtime) 共享可控 Agent Runtime；Hazard Lab 是压力测试场景。
 
-浏览器里的 Workbench 会把这条链路直接展示出来：
+Ops / Research / Reviewer 属于**展示层 reframing**。工作台现在调用真实后端 PolicyGate，但没有外部业务连接器：门控判断不会实际发布、写审计日志或提交 DomainEvent；脱敏字段名也是展示约定。下方历史截图早于此次修复，不作为当前门控结果的证据。
 
-```text
-Intent -> Director Router -> Scoped AgentView -> Agent Runtime -> Tool Gate -> EventDrain -> Trace / State Diff
-```
+## Evidence / Eval 分层
 
-Hazard Lab 保留为底层状态场景，用来压测隐藏状态、多 Agent 协作、长期记忆和确定性提交。它不是主展示重点，主展示重点是受控 Agent runtime。
+上方 CI 链接可核查 pytest、golden eval、npm test、Ruff 和核心新模块 mypy 的实际运行。只有推送后 GitHub 才能验证此次修改，本地通过不能代表远端 CI 已通过。
 
-## 先看什么
+- **50/50 golden eval** 是无 live model 的确定性逻辑重放，固定模型回复、骰子与时钟，证明逻辑无回归，不证明真实模型质量。
+- **真实 LLM benchmark** 只有 4 个 case，需要模型密钥；结论范围限于这些案例。`--dry-run` 只是选择案例。
+- 同一状态下路由确定；实时模型文本和普通游戏骰子仍可能变化，重放会显式控制它们。
 
-下面三张图都由同一个 Workbench 通过 URL preset 生成。它们不是手工拼图，展示的是同一套引擎在不同 Agent 权限下的真实分流结果：工具不同、可见字段不同、Tool Gate 决策不同、EventDrain 提交的事件也不同。
+## 可复现启动
 
-| 工作流 | 图中要看的点 |
-| --- | --- |
-| Ops Agent | 只有通过 eval 和 schema 检查后，才允许调用 `publish_policy_patch`。 |
-| Research Agent | 只能做工单检索和知识库查询，没有发布/部署工具。 |
-| Reviewer Agent | 能读取 CI/eval 状态并写审计日志，但直接发布会被 Tool Gate 阻断。 |
-
-![Ops Agent workflow: tool call approved after eval gate](docs/assets/runtime-workflow-ops.png)
-
-![Research Agent workflow: read-only retrieval scope](docs/assets/runtime-workflow-research.png)
-
-![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
-
-## 为什么要做这个
-
-很多 Agent demo 的问题是：把全量上下文和工具都交给模型，然后让模型自由生成结果。这样在真实业务里很难可靠交付，因为会出现上下文泄漏、越权调用、状态幻觉、不可回放、难排查等问题。
-
-这个项目把职责拆开：
-
-- `Director Router`：在生成前决定路由和目标 Agent。
-- `Scoped AgentView`：为不同 Agent 构造不同的 prompt 片段、工具白名单、可见字段和记忆作用域。
-- `Agent Runtime`：在受限上下文里生成结构化 action / tool candidate。
-- `Tool Gate`：校验角色权限、参数 schema 和业务前置条件。
-- `EventDrain`：把通过或阻断的结果写成 typed events，形成可审计状态。
-- Web Workbench：展示 trace、payload、state diff 和 committed events，方便研发排查。
-
-核心思想是受控自治：LLM 可以理解意图和提出行动，但上下文边界、工具权限、状态变更和回归验证由工程运行时控制。
-
-## 工程证据
-
-运行完整证据脚本：
+Linux/macOS，Python 3.11+：
 
 ```bash
-python scripts/generate_evidence_report.py
-```
-
-当前本地结果：
-
-| 质量门禁 | 结果 |
-| --- | --- |
-| Python tests | `460 passed` |
-| Golden replay evals | `50/50 passed` |
-| Web UI tests | `286 passed` |
-| Benchmark dry-run | `4 cases selected` |
-
-完整报告见：[Engineering Evidence Report](docs/evidence-report.md)。
-
-## 本地运行
-
-```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.lock
+npm ci
+pytest -q
+python -m core.eval.runner --suite golden
+npm test
 python server.py
 ```
 
-打开 Workbench：
+或运行 `docker compose up --build`，访问 http://127.0.0.1:8000/web_ui/。开放式聊天需配置模型密钥；工作台门控不需要模型。可选 Chroma / Streamlit 依赖见 `requirements-optional.txt`。
+
+工作台候选请求由 `/api/gate/evaluate` 返回 `allow / deny + reason + matched_rule`。Ops 发布候选默认拒绝；运行 `python scripts/generate_gate_evidence.py`，后端记录当前源码摘要与完整 50/50 结果后才可允许。源码变更使证据失效；这不是生产发布审批。
+
+意图解析、重试和并发边界见 [工程说明](docs/engineering-boundaries.md)。
+
+## 实现关系
+
+仿真主链路由 GameService、LangGraph、ActorView、mechanics、typed events / legacy physics 和 checkpoint 构成。部分旧 mechanics 仍直接修改领域快照，不能声称所有变更都已事件化。业务工作台单独展示候选请求的权限评估：
 
 ```text
-http://127.0.0.1:8000/web_ui/?session_id=demo_run_001&map_id=hazard_lab&qa_no_idle=1
+样例候选 → POST /api/gate/evaluate → 后端 ScopedAgentView → PolicyGate → decision / reason / matched_rule
 ```
 
-复现三张截图：
-
-```text
-http://127.0.0.1:8000/web_ui/?session_id=workflow_ops&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=policy_publish
-http://127.0.0.1:8000/web_ui/?session_id=workflow_research&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=ticket_triage
-http://127.0.0.1:8000/web_ui/?session_id=workflow_reviewer&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=release_audit
-```
-
-## 测试与评估
-
-```bash
-pytest -q
-python -m core.eval.runner --suite golden
-python scripts/generate_benchmark.py --dry-run --max-cases 4
-npm test
-make check
-```
-
-## 架构
-
-```mermaid
-flowchart TD
-    Intent["User Intent"] --> Service["FastAPI / GameService"]
-    Service --> Graph["LangGraph Runtime"]
-    Graph --> Router["Director Router"]
-    Router --> View["Scoped AgentView"]
-    View --> Agent["Agent Runtime"]
-    Agent --> Candidate["Typed Tool Candidate"]
-    Candidate --> Gate["Policy / Tool Gate"]
-    Gate --> Events["DomainEvent / Tool Audit"]
-    Events --> Drain["EventDrain"]
-    Drain --> State["Checkpointed Runtime State"]
-    State --> UI["Workbench Trace / Payload / State Diff"]
-    State --> Eval["Golden Replay / Benchmark"]
-```
-
-## 仓库结构
-
-```text
-core/application/      API、UI、eval、benchmark 共用的服务边界
-core/graph/            LangGraph 状态机、路由和节点编排
-core/actors/           ActorView、ActorRuntime、registry、visibility contracts
-core/events/           typed events、apply path、event store
-core/memory/           scoped memory、retrieval、distillation、service layer
-core/eval/             golden replay runner、assertions、telemetry、reports
-evals/golden/          deterministic replay cases
-evals/benchmark/       model-backed benchmark cases
-web_ui/                Runtime Workbench、Director Timeline、Payload Inspector、State Diff
-docs/                  walkthrough、architecture、case study、evidence report
-```
-
-## 项目边界
-
-这不是模型训练项目，也不是内容量展示项目。场景预览刻意做得很小，目的是验证 Agent runtime 的工程能力：权限边界、工具作用域、确定性状态提交、可观测调试、可回放评估和自动化质量门禁。
+历史截图与旧 evidence report 仅留档。当前验证见 [优化验收记录](docs/optimization-verification.md)，实际结果以 API 与 CI 运行记录为准。

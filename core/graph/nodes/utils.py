@@ -413,7 +413,7 @@ def _msg_content(m) -> str:
     return getattr(m, "content", "")
 
 
-def _message_to_dict(m) -> dict:
+def _message_to_dict(m) -> dict[str, Any]:
     """转为 engine 格式：{role: 'user'|'assistant', content: str}。"""
     if isinstance(m, dict):
         role = m.get("role", "user")

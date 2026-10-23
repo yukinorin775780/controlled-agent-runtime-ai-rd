@@ -249,10 +249,10 @@ def _get_openai_client() -> OpenAI:
 def load_dm_template() -> Template:
     """
     Load the DM prompt template.
-    
+
     Returns:
         jinja2.Template: The loaded DM prompt template
-    
+
     Raises:
         TemplateNotFound: If the template file doesn't exist
     """
@@ -1370,33 +1370,11 @@ def _detect_end_turn_intent(
     }
 
 
-def analyze_intent(
-    user_input: str,
-    flags: Optional[Dict[str, Any]] = None,
-    time_of_day: str = "晨曦 (Morning)",
-    hp: int = 20,
-    available_npcs: Optional[List[str]] = None,
+def _classify_keywords(
+    user_input: str, *, available_npcs: Optional[List[str]] = None,
     available_targets: Optional[List[str]] = None,
-    item_lore: Optional[str] = None,
     active_dialogue_target: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Analyze player intent and determine game mechanics.
-    
-    Args:
-        user_input: The player's input text
-        flags: Current world-state flags for context-aware intent analysis and rule engine
-        hp: NPC current HP for濒死拦截
-
-    Returns:
-        dict: Intent analysis result with keys:
-            - action_type: str (DECEPTION, PERSUASION, INTIMIDATION, INSIGHT, ATTACK, NONE)
-            - difficulty_class: int (0-30)
-            - reason: str (explanation)
-    
-    Raises:
-        RuntimeError: If template loading or LLM call fails
-    """
+) -> Optional[Dict[str, Any]]:
     available_npcs = available_npcs or list(DEFAULT_AVAILABLE_NPCS)
     available_targets = available_targets or list(available_npcs)
     normalized_active_dialogue_target = str(active_dialogue_target or "").strip().lower()
@@ -1532,6 +1510,47 @@ def analyze_intent(
                 "clear_active_dialogue_target": True,
             }
 
+    return None
+
+
+def analyze_intent(
+    user_input: str,
+    flags: Optional[Dict[str, Any]] = None,
+    time_of_day: str = "晨曦 (Morning)",
+    hp: int = 20,
+    available_npcs: Optional[List[str]] = None,
+    available_targets: Optional[List[str]] = None,
+    item_lore: Optional[str] = None,
+    active_dialogue_target: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Analyze player intent and determine game mechanics.
+
+    Args:
+        user_input: The player's input text
+        flags: Current world-state flags for context-aware intent analysis and rule engine
+        hp: NPC current HP for濒死拦截
+
+    Returns:
+        dict: Intent analysis result with keys:
+            - action_type: str (DECEPTION, PERSUASION, INTIMIDATION, INSIGHT, ATTACK, NONE)
+            - difficulty_class: int (0-30)
+            - reason: str (explanation)
+
+    Raises:
+        RuntimeError: If template loading or LLM call fails
+    """
+    normalized_active_dialogue_target = str(active_dialogue_target or "").strip().lower()
+    from core.intent import get_intent_classifier
+    available_npcs = available_npcs or list(DEFAULT_AVAILABLE_NPCS)
+    available_targets = available_targets or list(available_npcs)
+    result = get_intent_classifier().classify(
+        user_input, available_npcs=available_npcs, available_targets=available_targets,
+        active_dialogue_target=active_dialogue_target,
+    )
+    if result is not None:
+        return result
+
     # 濒死拦截：HP <= 0 时 NPC 已昏迷，跳过 LLM 判定
     if hp <= 0:
         return {
@@ -1555,15 +1574,15 @@ def analyze_intent(
     )
     if item_lore:
         prompt += "\n\n" + item_lore
-    
+
     response_text: Optional[str] = None
-    
+
     try:
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
         client = _get_openai_client()
         llm_started_at = time.perf_counter()
-        
+
         completion = client.chat.completions.create(
             model=settings.MODEL_NAME,
             messages=messages,  # type: ignore
@@ -1580,11 +1599,11 @@ def analyze_intent(
             duration_ms=max(0, int(round((time.perf_counter() - llm_started_at) * 1000))),
             token_usage=extract_token_usage(completion),
         )
-        
+
         response_text = completion.choices[0].message.content
         if not response_text:
             raise RuntimeError("LLM returned empty response")
-        
+
         # Parse JSON from response（防弹解析：失败时返回空字典）
         intent_data = parse_json_response(response_text)
 
@@ -1607,10 +1626,10 @@ def analyze_intent(
         for field in required_fields:
             if field not in intent_data:
                 raise ValueError(f"Missing required field in intent analysis: {field}")
-        
+
         # Ensure difficulty_class is an integer
         intent_data['difficulty_class'] = int(intent_data['difficulty_class'])
-        
+
         # Ensure action_type is uppercase
         intent_data['action_type'] = str(intent_data['action_type']).upper()
         intent_data["action_actor"] = str(intent_data.get("action_actor", "player")).strip().lower() or "player"

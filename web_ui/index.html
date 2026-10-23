@@ -19,7 +19,7 @@
           <h1>Agent Runtime Workbench</h1>
         </div>
         <div class="workbench-status">
-          <span>pre-LLM trace</span>
+          <span>candidate evaluation</span>
           <strong>Scoped Tool Orchestration</strong>
         </div>
       </div>
@@ -41,13 +41,13 @@
             </button>
             <button type="button" class="workbench-command" data-workbench-preset="release_audit">
               <strong>Release Audit</strong>
-              <span>Reviewer Agent · ci_status -> audit_log_write</span>
+              <span>Reviewer Agent · publish permission check</span>
             </button>
           </div>
-          <div id="workbench-outcome" class="workbench-outcome" data-outcome="approved" aria-live="polite">
-            <span id="workbench-outcome-label">TOOL CALL APPROVED</span>
-            <strong id="workbench-outcome-title">Ops Agent can publish after eval gate</strong>
-            <small id="workbench-outcome-detail">Allowed tool call is committed through EventDrain.</small>
+          <div id="workbench-outcome" class="workbench-outcome" data-outcome="pending" aria-live="polite">
+            <span id="workbench-outcome-label">WAITING FOR BACKEND</span>
+            <strong id="workbench-outcome-title">No decision received</strong>
+            <small id="workbench-outcome-detail">Evaluate a candidate with the backend. No external action is executed.</small>
           </div>
         </section>
 
@@ -61,7 +61,7 @@
             <div data-step="router"><strong>Router</strong><small>路由分类</small></div>
             <div data-step="scope"><strong>Scoped View</strong><small>上下文/工具白名单</small></div>
             <div data-step="tool_gate"><strong>Tool Gate</strong><small>鉴权/参数校验</small></div>
-            <div data-step="event_drain"><strong>EventDrain</strong><small>审计提交</small></div>
+            <div data-step="event_drain"><strong>EventDrain</strong><small>此处仅评估，不提交</small></div>
           </div>
         </section>
 
@@ -83,10 +83,10 @@
             <h2>Runtime Proof</h2>
           </div>
           <div class="workbench-proof-grid" aria-label="Runtime proof">
-            <div><span>Selected agent</span><strong id="workbench-proof-agent">ops_agent</strong></div>
-            <div><span>Allowed tools</span><strong id="workbench-proof-tools">eval_summary, publish_policy_patch</strong></div>
-            <div><span>Masked fields</span><strong id="workbench-proof-masked">raw_user_pii, billing_token</strong></div>
-            <div><span>EventDrain commit</span><strong id="workbench-proof-events">TOOL_CALL_APPROVED</strong></div>
+            <div><span>Selected agent</span><strong id="workbench-proof-agent">Waiting for backend</strong></div>
+            <div><span>Allowed tools</span><strong id="workbench-proof-tools">Waiting for backend</strong></div>
+            <div><span>Masked fields</span><strong id="workbench-proof-masked">Waiting for backend</strong></div>
+            <div><span>Committed events</span><strong id="workbench-proof-events">No events committed</strong></div>
           </div>
         </section>
       </div>
@@ -343,7 +343,7 @@
         </div>
         <div>
           <strong>Audit Commit</strong>
-          <small>DomainEvent and EventDrain write traceable state</small>
+          <small>Simulation commits use DomainEvent / EventDrain; candidate evaluation commits nothing.</small>
         </div>
       </div>
     </section>
@@ -371,14 +371,14 @@
       </div>
       <div class="xray-meter-row">
         <div class="xray-meter-label">
-          <span id="patience-label">Policy Confidence</span>
+          <span id="patience-label">Gate Decision</span>
           <strong id="patience-value">--</strong>
         </div>
         <div class="xray-meter"><div id="patience-bar" class="xray-meter-fill xray-meter-fill--gold"></div></div>
       </div>
       <div class="xray-meter-row">
         <div class="xray-meter-label">
-          <span id="fear-label">Tool Risk</span>
+          <span id="fear-label">Matched Rule</span>
           <strong id="fear-value">--</strong>
         </div>
         <div class="xray-meter"><div id="fear-bar" class="xray-meter-fill xray-meter-fill--blood"></div></div>

@@ -235,3 +235,7 @@ __pycache__/
 output/
 node_modules/
 .DS_Store
+
+# Checkpoint advisory locks
+*.db.lock
+*.sqlite.lock

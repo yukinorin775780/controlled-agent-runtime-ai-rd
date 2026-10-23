@@ -18,6 +18,7 @@ from core.campaigns.hazard_lab import (
 )
 from core.engine.physics import DEBUG_ALWAYS_PASS_CHECKS
 from core.events.models import DomainEvent, event_to_dict
+from core.gate.policy_gate import ScopedAgentView, ToolCall, policy_gate
 from core.systems.dice import roll_d20
 from core.systems.inventory import get_registry
 from core.systems.maps import get_map_data
@@ -160,7 +161,7 @@ def calculate_ability_modifier(ability_score: int) -> int:
     return (ability_score - 10) // 2
 
 
-def get_ability_modifiers(ability_scores: dict) -> dict:
+def get_ability_modifiers(ability_scores: dict[str, Any]) -> dict[str, Any]:
     """
     Calculate all ability modifiers from ability scores.
     
@@ -2899,19 +2900,18 @@ def _reject_if_not_active_turn(
     target_id: str,
     entities: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    if not bool(state.get("combat_active", False)):
-        return None
-    initiative_order = list(state.get("initiative_order") or [])
-    if not initiative_order:
-        return None
     active_block = _get_active_turn_block(
-        state=state,
-        entities=entities,
-        initiative_order=initiative_order,
+        state=state, entities=entities,
+        initiative_order=list(state.get("initiative_order") or []),
+    ) if state.get("combat_active") else []
+    decision = policy_gate.evaluate(
+        ScopedAgentView(
+            actor_id=_normalize_entity_id(actor_id),
+            allowed_tools=frozenset({"combat_action"}),
+            facts={"combat_active": state.get("combat_active", False), "active_block": active_block},
+        ), ToolCall("combat_action"),
     )
-    if not active_block:
-        return None
-    if _normalize_entity_id(actor_id) in active_block:
+    if decision.allowed:
         return None
     return _build_turn_lock_result(
         state=state,
@@ -3105,12 +3105,16 @@ def _is_gatekeeper_loot_source(*, target_id: str, target_obj: Dict[str, Any]) ->
 
 
 def _allow_hazard_lab_gatekeeper_loot(state: Any, *, target_id: str, target_obj: Dict[str, Any]) -> bool:
-    if not _is_hazard_lab_map(state):
-        return False
-    if not _is_gatekeeper_loot_source(target_id=target_id, target_obj=target_obj):
-        return False
-    flags = _flags_dict(state)
-    return bool(flags.get("world_hazard_lab_gatekeeper_defeated", False))
+    return policy_gate.evaluate(
+        ScopedAgentView(
+            actor_id="player", allowed_tools=frozenset({"gatekeeper_loot"}),
+            facts={
+                "hazard_lab": _is_hazard_lab_map(state),
+                "gatekeeper_source": _is_gatekeeper_loot_source(target_id=target_id, target_obj=target_obj),
+                "gatekeeper_defeated": bool(_flags_dict(state).get("world_hazard_lab_gatekeeper_defeated", False)),
+            },
+        ), ToolCall("gatekeeper_loot"),
+    ).allowed
 
 
 def _should_eventize_hazard_lab_gatekeeper_key_loot(
@@ -7656,7 +7660,7 @@ def get_ability_for_action(action_type: str) -> str:
     return action_to_ability.get(key, "CHA")
 
 
-def get_player_modifier(player_data: dict, ability_name: str) -> Optional[int]:
+def get_player_modifier(player_data: dict[str, Any], ability_name: str) -> Optional[int]:
     """
     Get player's ability modifier for a given ability.
     
@@ -7805,7 +7809,7 @@ def execute_skill_check(state: Any) -> Dict[str, Any]:
             score = (char.data.get("ability_scores") or {}).get(ability_name, 10)
             stat_mod = calculate_ability_modifier(int(score))
         except Exception as e:
-            print(f"⚠️ 无法读取 {action_actor} 的属性，默认修正为 +0 ({e})")
+            logging.getLogger(__name__).debug(str(f"⚠️ 无法读取 {action_actor} 的属性，默认修正为 +0 ({e})"))
             stat_mod = 0
     else:
         # 玩家执行：未来可从 player.json / entities['player'] 读取；当前暂定 +2 作为熟练补偿占位
@@ -7871,7 +7875,7 @@ def execute_skill_check(state: Any) -> Dict[str, Any]:
     return payload
 
 
-def calculate_passive_dc(action_type: str, npc_attributes: dict) -> Optional[int]:
+def calculate_passive_dc(action_type: str, npc_attributes: dict[str, Any]) -> Optional[int]:
     """
     Calculate passive DC based on NPC's stats (Phase 1: Rules Overrule).
     
@@ -7905,7 +7909,7 @@ def calculate_passive_dc(action_type: str, npc_attributes: dict) -> Optional[int
         return None
 
 
-def check_condition(condition_str: str, flags: dict) -> bool:
+def check_condition(condition_str: str, flags: dict[str, Any]) -> bool:
     """
     Safely evaluate a simple condition string against flags.
     
@@ -7951,7 +7955,7 @@ def check_condition(condition_str: str, flags: dict) -> bool:
     return current_value != rhs_value
 
 
-def update_flags(effect_str: str, flags: dict) -> dict:
+def update_flags(effect_str: str, flags: dict[str, Any]) -> dict[str, Any]:
     """
     Apply a flag update string to the flags dict in place.
     
@@ -7982,15 +7986,15 @@ def update_flags(effect_str: str, flags: dict) -> dict:
     old_value = flags.get(key)
     flags[key] = rhs_value
     if old_value != rhs_value:
-        print(f"[flags] {key}: {old_value} -> {rhs_value}")
+        logging.getLogger(__name__).debug(str(f"[flags] {key}: {old_value} -> {rhs_value}"))
     return flags
 
 
 def get_situational_bonus(
-    history: list,
+    history: list[Any],
     action_type: str,
-    rules_config: list,
-    flags: dict,
+    rules_config: list[Any],
+    flags: dict[str, Any],
     current_message: str = ""
 ) -> tuple[int, str]:
     """
@@ -8070,8 +8074,8 @@ def get_situational_bonus(
 
 def process_dialogue_triggers(
     user_input: str,
-    triggers_config: list,
-    flags: dict,
+    triggers_config: list[Any],
+    flags: dict[str, Any],
     ui=None,
     player_inv=None,
     npc_inv=None,
@@ -8142,11 +8146,9 @@ def process_dialogue_triggers(
                     item_name = registry.get_name(item_id)
                     if player_inv.remove(item_id):
                         npc_inv.add(item_id)
-                        if ui:
-                            ui.print_system_info(f"🎒 Item Transferred: {item_name} (Player -> NPC)")
+                        logger.debug("Item transferred: %s (player -> NPC)", item_name)
                     else:
-                        if ui:
-                            ui.print_system_info(f"❌ Transaction Failed: You don't have {item_name}")
+                        logger.debug("Transaction rejected: missing item %s", item_name)
 
         # 好感度：配置中的 approval_change 累加，由调用方加算到 state["relationship"]
         delta = trigger.get("approval_change", 0)
@@ -8219,7 +8221,7 @@ def parse_dice_string(dice_str: str) -> int:
     return total
 
 
-def apply_item_effect(item_id: str, item_data: dict) -> dict:
+def apply_item_effect(item_id: str, item_data: dict[str, Any]) -> dict[str, Any]:
     """
     Executes the effect defined in the item's YAML configuration.
 

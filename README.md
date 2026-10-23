@@ -1,117 +1,65 @@
 # Controlled Agent Runtime Workbench
 
-[中文 README](README.zh-CN.md)
+[![checks](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd/actions/workflows/checks.yml/badge.svg)](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd/actions/workflows/checks.yml)
 
-This project is a working runtime for controlling LLM agents before they call tools or mutate state.
+## Origin and scope
 
-It answers a practical engineering question: when a user gives an intent, how do we decide which agent should handle it, what that agent is allowed to see, which tools it can call, whether the tool call is safe, and how the result is committed in an auditable way?
+Extracted from [BG3-LLM-Agent](https://github.com/yukinorin775780/BG3-LLM-Agent), where the original iteration history lives. The sibling projects are [the workbench](https://github.com/yukinorin775780/controlled-agent-runtime-ai-rd) and [the simulation runtime](https://github.com/yukinorin775780/controlled-agent-sim-runtime).
 
-The browser workbench makes that flow visible:
+The core is a controlled agent runtime. Hazard Lab is its stateful stress-test scenario. Ops / Research / Reviewer are a **presentation-layer reframing** of role boundaries. Their workbench candidates now call the real backend PolicyGate; the business connectors themselves are not implemented. Gate evaluation does not publish anything, write an audit log, or commit DomainEvents. The role mask labels illustrate intended fields, not integrations with real customer data. Historical screenshots below predate this correction.
 
-```text
-Intent -> Director Router -> Scoped AgentView -> Agent Runtime -> Tool Gate -> EventDrain -> Trace / State Diff
-```
+## Evidence and evaluation limits
 
-Hazard Lab is kept as a compact stateful scenario behind the workbench. It is not the main product surface; it is a stress test for hidden state, multi-agent coordination, memory, and deterministic commits.
+The linked CI workflow runs pytest, golden replay, npm tests, Ruff and focused mypy checks. Its badge is the public execution record; local results do not imply a successful remote run. These local changes must be pushed before GitHub can verify them.
 
-## What To Look At
+- **50/50 golden eval** means deterministic logical replay with scripted model responses and controlled dice/time. It checks regression of logic, visibility and state commits, not live model quality.
+- **Real LLM benchmark** has four cases; it is separate, requires credentials, and measures behavior only within those cases. A benchmark dry-run only selects cases and proves no model quality result.
+- Routing is deterministic for the same state. Live language generation and ordinary game dice are not globally deterministic; golden replay explicitly supplies their outputs.
 
-The three screenshots below are generated from the same runtime with different URL presets. They show that the system is not just changing text labels: different agents receive different tool permissions, masked fields, gate decisions, and committed events.
+## Reproducible local setup
 
-| Workflow | Runtime behavior |
-| --- | --- |
-| Ops Agent | Can publish a policy patch only after eval and schema checks pass. |
-| Research Agent | Can search and retrieve knowledge-base context, but has no deploy/publish tools. |
-| Reviewer Agent | Can read CI/eval status and write an audit log, but direct publish is blocked. |
-
-![Ops Agent workflow: tool call approved after eval gate](docs/assets/runtime-workflow-ops.png)
-
-![Research Agent workflow: read-only retrieval scope](docs/assets/runtime-workflow-research.png)
-
-![Reviewer Agent workflow: direct publish blocked, audit committed](docs/assets/runtime-workflow-reviewer.png)
-
-## Why This Matters
-
-Many agent demos let the model see too much context and imply state changes through generated text. That is hard to trust in a real workflow.
-
-This runtime separates the responsibilities:
-
-- `Director Router` chooses the route and target agent before generation.
-- `Scoped AgentView` builds the agent-specific prompt slice, allowed tools, visible fields, and memory scope.
-- `Agent Runtime` prepares a typed action or tool candidate.
-- `Tool Gate` validates role permission, schema, and preconditions.
-- `EventDrain` commits typed events into durable state so the result is replayable and inspectable.
-- The Web workbench exposes the trace, payload summary, state diff, and committed events.
-
-The reusable idea is bounded autonomy: the LLM can interpret intent and propose actions, but the runtime owns context boundaries, tool permissions, state mutation, and regression checks.
-
-## Engineering Evidence
-
-Run the reproducible evidence script:
+Python 3.11+ on Linux/macOS:
 
 ```bash
-python scripts/generate_evidence_report.py
-```
-
-Latest local result:
-
-| Gate | Result |
-| --- | --- |
-| Python tests | `460 passed` |
-| Golden replay evals | `50/50 passed` |
-| Web UI tests | `286 passed` |
-| Benchmark dry-run | `4 cases selected` |
-
-See [Engineering Evidence Report](docs/evidence-report.md) for the generated report.
-
-## Run It Locally
-
-```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.lock
+npm ci
+pytest -q
+python -m core.eval.runner --suite golden
+npm test
 python server.py
 ```
 
-Open the workbench:
+Optional Chroma/Streamlit dependencies are listed in `requirements-optional.txt`. The default memory backend degrades to the existing fallback when Chroma is absent.
 
-```text
-http://127.0.0.1:8000/web_ui/?session_id=demo_run_001&map_id=hazard_lab&qa_no_idle=1
-```
-
-Reproduce the screenshot presets:
-
-```text
-http://127.0.0.1:8000/web_ui/?session_id=workflow_ops&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=policy_publish
-http://127.0.0.1:8000/web_ui/?session_id=workflow_research&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=ticket_triage
-http://127.0.0.1:8000/web_ui/?session_id=workflow_reviewer&map_id=hazard_lab&qa_no_idle=1&workbench_static=1&workbench_preset=release_audit
-```
-
-## Test And Evaluation Commands
+For a containerized backend and browser UI:
 
 ```bash
-pytest -q
-python -m core.eval.runner --suite golden
-python scripts/generate_benchmark.py --dry-run --max-cases 4
-npm test
-make check
+docker compose up --build
 ```
 
-## Architecture
+Open http://127.0.0.1:8000/web_ui/. The workbench and rule evaluation need no live model key; open-ended chat requires `BAILIAN_API_KEY` and the matching base URL. SQLite data persists in the named Docker volume.
 
-```mermaid
-flowchart TD
-    Intent["User Intent"] --> Service["FastAPI / GameService"]
-    Service --> Graph["LangGraph Runtime"]
-    Graph --> Router["Director Router"]
-    Router --> View["Scoped AgentView"]
-    View --> Agent["Agent Runtime"]
-    Agent --> Candidate["Typed Tool Candidate"]
-    Candidate --> Gate["Policy / Tool Gate"]
-    Gate --> Events["DomainEvent / Tool Audit"]
-    Events --> Drain["EventDrain"]
-    Drain --> State["Checkpointed Runtime State"]
-    State --> UI["Workbench Trace / Payload / State Diff"]
-    State --> Eval["Golden Replay / Benchmark"]
+## Backend gate verification
+
+```bash
+curl -s http://127.0.0.1:8000/api/gate/evaluate -H 'Content-Type: application/json' -d '{"actor_id":"research_agent","tool_name":"ticket_search","args":{"window":"24h","output_scope":"public_kb_candidate"}}'
 ```
+
+This returns `allow` with `reason` and `matched_rule`; changing the role to `reviewer_agent` denies the search. Publishing candidates default to `deny` until `python scripts/generate_gate_evidence.py` records a complete passing golden suite for the current source digest. Changes to source invalidate that evidence. This evidence is a local logic regression gate, not approval for a real production release.
+
+See [engineering boundaries](docs/engineering-boundaries.md) for intent parsing, retry safety and single-machine concurrency limits.
+
+## Architecture and implementation
+
+The simulation uses GameService → LangGraph → ActorView / mechanics → typed events and legacy physics → checkpoint / UI. Some legacy mechanics still mutate domain snapshots directly; not every effect is event-sourced. The business workbench is a separate presentation of candidate evaluation:
+
+```text
+Sample candidate → POST /api/gate/evaluate → backend ScopedAgentView → PolicyGate → decision / reason / matched_rule
+```
+
+No business tool is executed by this endpoint. Existing screenshots and `docs/evidence-report.md` are historical; use current API responses and CI runs for evidence. The current local verification is documented in [optimization verification](docs/optimization-verification.md).
 
 ## Repository Map
 

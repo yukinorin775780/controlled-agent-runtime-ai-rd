@@ -2,11 +2,12 @@
 DM 分析、多人发言推进、旁白节点。
 """
 
+import logging
+
 import asyncio
 import copy
-import random
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_core.messages import AIMessage
 
@@ -100,7 +101,7 @@ _DOOR_GUIDANCE_QUESTION_MARKERS = (
 )
 
 
-def _has_scripted_hazard_reason(analysis: dict) -> bool:
+def _has_scripted_hazard_reason(analysis: dict[str, Any]) -> bool:
     reason = str((analysis or {}).get("reason") or "").strip()
     return reason.startswith(("scripted_hazard_lab_", "scripted_diary_negotiation_"))
 
@@ -121,7 +122,7 @@ def _looks_like_gatekeeper_boss_room_intro_text(user_input: str) -> bool:
     )
 
 
-def _apply_act3_hazard_lab_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_act3_hazard_lab_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     choice = detect_lab_act3_choice(dict(state or {}))
     if choice not in {ACT3_CHOICE_SIDE_WITH_SCOUT, ACT3_CHOICE_REBUKE_SCOUT}:
         return analysis
@@ -153,7 +154,7 @@ def _apply_act3_hazard_lab_override(*, state: GameState, analysis: dict) -> dict
     return overridden
 
 
-def _apply_act4_hazard_lab_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_act4_hazard_lab_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not detect_lab_act4_post_combat_banter(dict(state or {})):
         return analysis
 
@@ -177,7 +178,7 @@ def _apply_act4_hazard_lab_override(*, state: GameState, analysis: dict) -> dict
     return overridden
 
 
-def _apply_gatekeeper_boss_intro_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_gatekeeper_boss_intro_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if _has_scripted_hazard_reason(analysis):
         return analysis
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
@@ -221,7 +222,7 @@ def _apply_gatekeeper_boss_intro_override(*, state: GameState, analysis: dict) -
     return overridden
 
 
-def _apply_gatekeeper_boss_strategy_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_gatekeeper_boss_strategy_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if _has_scripted_hazard_reason(analysis):
         return analysis
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
@@ -246,7 +247,7 @@ def _apply_gatekeeper_boss_strategy_override(*, state: GameState, analysis: dict
     return overridden
 
 
-def _apply_gatekeeper_boss_resolution_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_gatekeeper_boss_resolution_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if _has_scripted_hazard_reason(analysis):
         return analysis
     context = detect_gatekeeper_boss_resolution_context(
@@ -285,7 +286,7 @@ def _apply_gatekeeper_boss_resolution_override(*, state: GameState, analysis: di
     return overridden
 
 
-def _apply_key_guidance_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_key_guidance_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
     if existing_action in {"DISARM", "LOOT", "READ", "INTERACT", "MOVE", "APPROACH", "TRIGGER_TRAP", "ATTACK", "CAST_SPELL", "UNLOCK"}:
         return analysis
@@ -309,7 +310,7 @@ def _apply_key_guidance_override(*, state: GameState, analysis: dict) -> dict:
     return overridden
 
 
-def _apply_diary_negotiation_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_diary_negotiation_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
     if existing_action in {"DISARM", "LOOT", "READ", "INTERACT", "MOVE", "APPROACH", "TRIGGER_TRAP", "ATTACK", "CAST_SPELL", "UNLOCK"}:
         return analysis
@@ -348,7 +349,7 @@ def _looks_like_scout_trap_disarm(user_input: str) -> bool:
     )
 
 
-def _apply_trap_disarm_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_trap_disarm_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
     if not _looks_like_scout_trap_disarm(str(state.get("user_input") or "")):
@@ -366,7 +367,7 @@ def _apply_trap_disarm_override(*, state: GameState, analysis: dict) -> dict:
     return overridden
 
 
-def _apply_trap_awareness_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_trap_awareness_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
     if existing_action in {"DISARM", "LOOT", "READ", "INTERACT", "MOVE", "APPROACH", "TRIGGER_TRAP", "ATTACK", "CAST_SPELL", "UNLOCK"}:
         return analysis
@@ -405,7 +406,7 @@ def _apply_trap_awareness_override(*, state: GameState, analysis: dict) -> dict:
     return overridden
 
 
-def _apply_secret_study_entry_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_secret_study_entry_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
@@ -431,7 +432,7 @@ def _apply_secret_study_entry_override(*, state: GameState, analysis: dict) -> d
     return overridden
 
 
-def _apply_secret_study_observation_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_secret_study_observation_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
     existing_action = str((analysis or {}).get("action_type") or "").strip().upper()
@@ -457,7 +458,7 @@ def _apply_secret_study_observation_override(*, state: GameState, analysis: dict
     return overridden
 
 
-def _apply_scout_memory_echo_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_scout_memory_echo_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
 
@@ -501,7 +502,7 @@ def _apply_scout_memory_echo_override(*, state: GameState, analysis: dict) -> di
     return out
 
 
-def _apply_gatekeeper_mercy_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_gatekeeper_mercy_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
 
@@ -582,7 +583,7 @@ def _looks_like_lab_door_inspect(user_input: str) -> bool:
     )
 
 
-def _apply_hazard_lab_ui_text_fallback(*, state: GameState, analysis: dict) -> dict:
+def _apply_hazard_lab_ui_text_fallback(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
 
@@ -687,7 +688,7 @@ def _apply_hazard_lab_ui_text_fallback(*, state: GameState, analysis: dict) -> d
     return out
 
 
-def _apply_study_chest_loot_override(*, state: GameState, analysis: dict) -> dict:
+def _apply_study_chest_loot_override(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     context = detect_study_chest_loot_context(
         dict(state or {}),
         str(state.get("user_input") or ""),
@@ -746,7 +747,7 @@ def _is_hazard_lab(state: GameState) -> bool:
     return map_id == "hazard_lab"
 
 
-def _first_non_player_speaker(entities: dict, fallback_speaker: str) -> str:
+def _first_non_player_speaker(entities: dict[str, Any], fallback_speaker: str) -> str:
     fallback = str(fallback_speaker or "").strip().lower()
     fallback_entity = entities.get(fallback) if isinstance(entities, dict) else None
     if fallback and _is_valid_responder_candidate(fallback, fallback_entity):
@@ -799,7 +800,7 @@ def _looks_like_door_interact(user_input: str) -> bool:
     return any(marker in text or marker in lowered for marker in _DOOR_INTERACT_MARKERS)
 
 
-def _apply_hazard_door_target_fallback(*, state: GameState, analysis: dict) -> dict:
+def _apply_hazard_door_target_fallback(*, state: GameState, analysis: dict[str, Any]) -> dict[str, Any]:
     if not _is_hazard_lab(state):
         return analysis
     out = dict(analysis or {})
@@ -824,7 +825,7 @@ def _apply_hazard_door_target_fallback(*, state: GameState, analysis: dict) -> d
 def _build_structured_client_analysis(
     *,
     state: GameState,
-    entities: dict,
+    entities: dict[str, Any],
     fallback_speaker: str,
 ) -> Optional[dict]:
     client_intent = _coerce_client_intent(state)
@@ -892,7 +893,7 @@ def _build_structured_client_analysis(
     }
 
 
-def _is_idle_banter_speaker(entity_id: str, entity: dict) -> bool:
+def _is_idle_banter_speaker(entity_id: str, entity: dict[str, Any]) -> bool:
     normalized_id = str(entity_id or "").strip().lower()
     if not normalized_id or normalized_id in {"player", "unknown"}:
         return False
@@ -907,7 +908,7 @@ def _is_idle_banter_speaker(entity_id: str, entity: dict) -> bool:
     return True
 
 
-async def dm_node(state: GameState) -> dict:
+async def dm_node(state: GameState) -> dict[str, Any]:
     """
     分析玩家输入的意图。
     若 intent 为 command_done（系统指令已就地处理），直接跳过，不调用 LLM。
@@ -919,7 +920,7 @@ async def dm_node(state: GameState) -> dict:
 
     idle_intent = str(state.get("intent") or "").strip().lower()
     if idle_intent == "trigger_idle_banter":
-        # 挂机闲聊：不调用 analyze_intent，随机一位队友作「主声线」模板；双人台词由 generation 一次 JSON 输出
+        # 挂机闲聊：不调用 analyze_intent，按回合轮转一位队友作「主声线」模板；双人台词由 generation 一次 JSON 输出
         entities_raw = dict(state.get("entities") or {})
         if not entities_raw:
             entities_raw = copy.deepcopy(default_entities)
@@ -935,10 +936,10 @@ async def dm_node(state: GameState) -> dict:
             if isinstance(entity, dict) and _is_idle_banter_speaker(str(entity_id), entity)
         ]
         if not available_npcs:
-            print("🎲 DM Node: Idle banter (AFK) — no valid NPC speakers; skipping.")
+            logging.getLogger(__name__).debug(str("🎲 DM Node: Idle banter (AFK) — no valid NPC speakers; skipping."))
             return {}
-        current = random.choice(available_npcs)
-        print("🎲 DM Node: Idle banter (AFK) — skipping intent LLM, speaker seed:", current)
+        current = sorted(available_npcs)[int(state.get("turn_count") or 0) % len(available_npcs)]
+        logging.getLogger(__name__).debug(str("🎲 DM Node: Idle banter (AFK) — skipping intent LLM, speaker seed:") + " " + str(current))
         return {
             "entities": entities,
             "speaker_queue": [],
@@ -954,7 +955,7 @@ async def dm_node(state: GameState) -> dict:
             "is_probing_secret": False,
         }
 
-    print("🎲 DM Node: Analyzing intent...")
+    logging.getLogger(__name__).debug(str("🎲 DM Node: Analyzing intent..."))
     entities_raw = dict(state.get("entities") or {})
     if not entities_raw:
         entities_raw = copy.deepcopy(default_entities)
@@ -1305,9 +1306,7 @@ async def dm_node(state: GameState) -> dict:
         next_dialogue_target = None
 
     affection_changes = analysis.get("affection_changes", {})
-    from ui.renderer import GameRenderer
 
-    ui = GameRenderer()
     for npc_id, change in affection_changes.items():
         npc_id = str(npc_id).strip().lower()
         if npc_id in entities and isinstance(change, (int, float)) and change != 0:
@@ -1317,9 +1316,9 @@ async def dm_node(state: GameState) -> dict:
             npc_name_cn = entity_display_name(npc_id)
             delta = int(change)
             if delta > 0:
-                ui.print_system_info(f"💡 [bold green][ {npc_name_cn} 赞同 (Approves) {delta:+d} ][/bold green]")
+                logging.getLogger(__name__).debug(f"💡 [bold green][ {npc_name_cn} 赞同 (Approves) {delta:+d} ][/bold green]")
             else:
-                ui.print_system_info(f"💔 [bold red][ {npc_name_cn} 不赞同 (Disapproves) {delta:+d} ][/bold red]")
+                logging.getLogger(__name__).debug(f"💔 [bold red][ {npc_name_cn} 不赞同 (Disapproves) {delta:+d} ][/bold red]")
 
     responders = analysis.get("responders")
     if isinstance(responders, list) and len(responders) > 0:
@@ -1408,7 +1407,7 @@ async def dm_node(state: GameState) -> dict:
     return out
 
 
-def advance_speaker_node(state: GameState) -> dict:
+def advance_speaker_node(state: GameState) -> dict[str, Any]:
     """从 speaker_queue 弹出下一位，设为 current_speaker，实现多人连续发言。"""
     queue = list(state.get("speaker_queue", []))
     if not queue:
@@ -1418,12 +1417,12 @@ def advance_speaker_node(state: GameState) -> dict:
     return {"current_speaker": next_speaker, "speaker_queue": remaining}
 
 
-def narration_node(state: GameState) -> dict:
+def narration_node(state: GameState) -> dict[str, Any]:
     """
     DM 旁白节点 (V3): 负责渲染客观环境、动作结果，不再由 NPC 强行抢戏。
     使用 LLM 生成客观旁白，并严格锚定机制结果（掷骰 / DC / 成败）。
     """
-    print("🎙️ [路由追踪] 进入 DM 旁白节点 (Narration Node)")
+    logging.getLogger(__name__).debug(str("🎙️ [路由追踪] 进入 DM 旁白节点 (Narration Node)"))
 
     latest_roll = state.get("latest_roll", {})
     roll_result = latest_roll.get("result", {}) if isinstance(latest_roll, dict) else {}

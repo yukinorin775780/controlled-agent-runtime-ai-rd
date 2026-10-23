@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import os
 from typing import Any, Dict, List, Optional
 
@@ -32,7 +34,7 @@ class EpisodicMemoryManager:
 
     def clear_all_memories(self) -> None:
         self._service.clear_all()
-        print("💥 [系统] 长期记忆库已清空。")
+        logging.getLogger(__name__).debug(str("💥 [系统] 长期记忆库已清空。"))
 
     def add_memory(self, text: str, speaker: str = "system", metadata: Optional[Dict[str, Any]] = None) -> None:
         normalized_text = str(text or "").strip()
@@ -51,7 +53,7 @@ class EpisodicMemoryManager:
             source_session_id=str(meta.get("session_id") or ""),
         )
         self._service.upsert(record)
-        print(f"🧠 [记忆凝结] {speaker} 的记忆已存入: {normalized_text[:30]}...")
+        logging.getLogger(__name__).debug(str(f"🧠 [记忆凝结] {speaker} 的记忆已存入: {normalized_text[:30]}..."))
 
     def retrieve_relevant_memories(
         self,

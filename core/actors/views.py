@@ -61,7 +61,7 @@ class ActorView:
 
 @dataclass(frozen=True)
 class DirectorView:
-    """Phase 1 placeholder for orchestration authority."""
+    """Full-state orchestration authority; never passed to actor runtimes."""
 
     state: Dict[str, Any] = field(default_factory=dict)
 

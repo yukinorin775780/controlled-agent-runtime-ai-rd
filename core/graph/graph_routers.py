@@ -5,7 +5,6 @@ LangGraph 路由逻辑：根据 State 中的 intent 决定下一跳节点。
 保证类型安全，避免拼写错误导致运行时找不到节点。
 """
 
-import random
 from typing import Any, Dict, Literal, cast
 from core.graph.graph_state import GameState
 
@@ -224,7 +223,7 @@ def route_after_mechanics(state: GameState) -> MECHANICS_ROUTE:
 
 
 # -----------------------------------------------------------------------------
-# V3: 旁白后随机吐槽路由 (route_after_narration)
+# V3: 旁白后确定性吐槽路由 (route_after_narration)
 # -----------------------------------------------------------------------------
 
 NARRATION_ROUTE = Literal["generation", "__end__"]
@@ -233,9 +232,9 @@ NARRATION_ROUTE = Literal["generation", "__end__"]
 def route_after_narration(state: GameState) -> NARRATION_ROUTE:
     """
     DM 旁白结束后的路由：决定是否触发同伴吐槽 (Banter)。
-    普通操作 30% 概率触发；大成功(20)或大失败(1) 100% 触发。
+    已排队发言优先；极端检定触发；其余回合结束。
     """
-    # 若 DM 已排出后续发言 NPC，必须进入 generation，不能被随机吐槽判定短路到 __end__
+    # 若 DM 已排出后续发言 NPC，必须进入 generation，不能被兜底规则短路到 __end__
     if state.get("speaker_queue"):
         return "generation"
 
@@ -252,10 +251,6 @@ def route_after_narration(state: GameState) -> NARRATION_ROUTE:
 
     # 大成功(20)或大失败(1)，100% 吐槽
     if roll_value >= 18 or roll_value <= 5:
-        return "generation"
-
-    # 普通情况，30% 概率触发吐槽
-    if random.random() < 0.3:
         return "generation"
 
     return "__end__"

@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Protocol
 
 ALLOWED_TELEMETRY_EVENTS = frozenset(
     {
+        "execution_error",
         "turn_started",
         "turn_finished",
         "node_finished",

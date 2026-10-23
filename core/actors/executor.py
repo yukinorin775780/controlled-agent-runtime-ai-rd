@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Tuple
 from core.actors import ActorScopedMemoryProvider, build_actor_view
 from core.actors.contracts import ReflectionRequest, reflection_request_from_dict, reflection_request_to_dict
 from core.actors.registry import ActorRegistry
+from core.actors.contracts import ActorRuntime, ActorDecision
+from core.actors.retry import RetryPolicy, error_category, with_retry
 from core.eval.telemetry import emit_telemetry
 from core.events.models import DomainEvent, event_to_dict
 from core.memory.compat import get_default_memory_service
@@ -18,7 +20,7 @@ REFLECTION_SKIP_REASON_RUNTIME_MISSING = "runtime_missing"
 REFLECTION_SKIP_REASON_RUNTIME_FAILED = "runtime_failed"
 
 
-def _safe_get_runtime(registry: ActorRegistry, actor_id: str):
+def _safe_get_runtime(registry: ActorRegistry, actor_id: str) -> ActorRuntime | None:
     if hasattr(registry, "try_get"):
         runtime = registry.try_get(actor_id)
     else:
@@ -36,6 +38,7 @@ async def invoke_actor_runtime(
     state: Dict[str, Any],
     actor_id: str,
     registry: ActorRegistry,
+    retry_policy: RetryPolicy = RetryPolicy(),
 ) -> Tuple[Dict[str, Any], List[DomainEvent], List[ReflectionRequest]]:
     runtime = _safe_get_runtime(registry, actor_id)
     if runtime is None:
@@ -52,13 +55,18 @@ async def invoke_actor_runtime(
             actor_id,
             memory_provider=ActorScopedMemoryProvider(memory_service.retriever),
         )
-        decision = await runtime.decide(actor_view)
-    except Exception as exc:
+        decision = await with_retry(lambda: runtime.decide(actor_view), component="actor_decide", policy=retry_policy)
+        if not isinstance(decision, ActorDecision) or decision.actor_id != actor_id:
+            raise ValueError("Runtime must return an ActorDecision for the scoped actor.")
+    except Exception as exc:  # plugin boundary: preserve fallback for all classified failures
+        emit_telemetry("execution_error", component="actor_executor", actor_id=actor_id,
+                       error_type=type(exc).__name__, category=error_category(exc), retrying=False)
         return {
             "mode": "fallback",
             "actor_id": actor_id,
             "reason": FALLBACK_REASON_RUNTIME_FAILED,
             "error_type": exc.__class__.__name__,
+            "error_category": error_category(exc),
         }, [], []
 
     visible_flags = getattr(actor_view, "visible_flags", {})
@@ -88,6 +96,7 @@ async def process_reflection_queue(
     state: Dict[str, Any],
     registry: ActorRegistry,
     max_items: int = 1,
+    retry_policy: RetryPolicy = RetryPolicy(),
 ) -> Dict[str, Any]:
     queue_raw = list(state.get("reflection_queue") or [])
     if not queue_raw:
@@ -132,8 +141,8 @@ async def process_reflection_queue(
             )
             continue
         try:
-            events = await runtime.reflect(request)
-        except Exception as exc:
+            events = await with_retry(lambda: runtime.reflect(request), component="actor_reflect", policy=retry_policy)
+        except Exception as exc:  # reflection extension boundary, classified by with_retry
             remaining_requests.append(request)
             handled_count += 1
             telemetry_records.append(
@@ -145,6 +154,7 @@ async def process_reflection_queue(
                     "source_turn": int(request.source_turn or 0),
                     "emitted_event_count": 0,
                     "error_type": exc.__class__.__name__,
+                    "error_category": error_category(exc),
                 }
             )
             continue
@@ -176,6 +186,7 @@ async def process_reflection_queue(
             queue_length_after=queue_length_after,
             max_items=max_batch_size,
             error_type=record.get("error_type", ""),
+            error_category=record.get("error_category", ""),
         )
 
     return {

@@ -27,6 +27,7 @@ from config import settings
 from core.engine import generate_dialogue, parse_ai_response
 from core.actors import ActorScopedMemoryProvider, build_actor_view
 from core.actors.views import ActorView
+from core.actors.retry import RetryPolicy, with_retry
 from core.engine.physics import (
     apply_environment_interaction,
     apply_movement,
@@ -34,6 +35,7 @@ from core.engine.physics import (
     execute_loot,
 )
 from core.eval.telemetry import emit_telemetry, extract_token_usage
+from core.gate.policy_gate import ScopedAgentView, ToolCall, policy_gate
 from core.graph.graph_state import GameState
 from core.graph.nodes.utils import (
     _message_to_dict,
@@ -46,7 +48,7 @@ from core.graph.nodes.utils import (
 from core.systems.inventory import Inventory, format_inventory_dict_to_display_list, get_registry
 from core.systems.mechanics import process_dialogue_triggers
 from core.memory.compat import get_default_memory_service
-from core.tools.npc_tools import check_target_inventory
+from core.tools.npc_tools import check_target_inventory, inventory_scope
 from core.utils.text_processor import clean_npc_dialogue, format_history_message, parse_llm_json
 
 # 全局开关：设为 True 时打印发给大模型的 Payload（调试用）
@@ -147,32 +149,20 @@ def _llm_consume_action_allowed(intent: str, user_input: str) -> bool:
     NPC dialogue JSON is allowed to consume items only when the player explicitly
     requested item use. Combat/spell/move turns are already resolved by mechanics.
     """
-    normalized_intent = str(intent or "").strip().lower()
-    if normalized_intent in _CONSUME_ACTION_INTENTS:
-        return True
-
-    text = str(user_input or "").strip().lower()
-    explicit_use_markers = (
-        "喝",
-        "喝下",
-        "服用",
-        "使用治疗药水",
-        "用治疗药水",
-        "治疗药水",
-        "药水",
-        "drink",
-        "potion",
-        "use healing",
-    )
-    return any(marker in text for marker in explicit_use_markers)
+    return policy_gate.evaluate(
+        ScopedAgentView(
+            actor_id="npc", allowed_tools=frozenset({"consume_item"}),
+            facts={"intent": intent, "user_input": user_input},
+        ), ToolCall("consume_item"),
+    ).allowed
 
 
 def _execute_json_action(
-    physical_action: dict,
+    physical_action: dict[str, Any],
     speaker: str,
-    current_entities: dict,
-    player_inv_for_physics: dict,
-    current_env_objs: dict,
+    current_entities: dict[str, Any],
+    player_inv_for_physics: dict[str, Any],
+    current_env_objs: dict[str, Any],
     *,
     intent: str = "",
     user_input: str = "",
@@ -218,10 +208,8 @@ def _execute_json_action(
         tool_physics_events.append(loot_log)
     elif action_type in ("consume", "use_item", "use", "drink"):
         if not _llm_consume_action_allowed(intent, user_input):
-            print(
-                "⚠️ [安全拦截] 忽略 LLM 旁白越权物品消耗: "
-                f"speaker={speaker}, intent={intent}, action={physical_action}"
-            )
+            logging.getLogger(__name__).debug(str("⚠️ [安全拦截] 忽略 LLM 旁白越权物品消耗: "
+                f"speaker={speaker}, intent={intent}, action={physical_action}"))
             return tool_physics_events
         item_id = (physical_action.get("item_id") or "").strip()
         if item_id:
@@ -397,32 +385,32 @@ def _debug_print_messages(messages: List[BaseMessage], label: str = "") -> None:
         return
 
     if label:
-        print("\n" + "🔥" * 25)
-        print(label)
+        logging.getLogger(__name__).debug(str("\n" + "🔥" * 25))
+        logging.getLogger(__name__).debug(str(label))
     else:
-        print("\n" + "🔥" * 25)
-        print("🚨 正在打印发给大模型的最终 Payload...")
-    print(f"📊 当前消息总数: {len(messages)} 条")
+        logging.getLogger(__name__).debug(str("\n" + "🔥" * 25))
+        logging.getLogger(__name__).debug(str("🚨 正在打印发给大模型的最终 Payload..."))
+    logging.getLogger(__name__).debug(str(f"📊 当前消息总数: {len(messages)} 条"))
     for index, message in enumerate(messages):
         msg_type = message.__class__.__name__
-        print(f"\n[{index}] 角色/类型: {msg_type}")
+        logging.getLogger(__name__).debug(str(f"\n[{index}] 角色/类型: {msg_type}"))
         if msg_type == "SystemMessage":
             content_str = str(getattr(message, "content", "") or "")
             content_preview = content_str.replace("\n", " ")[:100]
-            print(f"    📝 内容预览: {content_preview}...")
-            print(f"    📏 总字符数: {len(content_str)}")
+            logging.getLogger(__name__).debug(str(f"    📝 内容预览: {content_preview}..."))
+            logging.getLogger(__name__).debug(str(f"    📏 总字符数: {len(content_str)}"))
         elif msg_type == "HumanMessage":
-            print(f"    🗣️ 玩家说: {message.content}")
+            logging.getLogger(__name__).debug(str(f"    🗣️ 玩家说: {message.content}"))
         elif msg_type == "AIMessage":
-            print(f"    🤖 AI 文本: {repr(message.content)}")
+            logging.getLogger(__name__).debug(str(f"    🤖 AI 文本: {repr(message.content)}"))
             if getattr(message, "tool_calls", None):
-                print(f"    🔧 携带工具调用意图: {getattr(message, 'tool_calls', None)}")
+                logging.getLogger(__name__).debug(str(f"    🔧 携带工具调用意图: {getattr(message, 'tool_calls', None)}"))
         elif msg_type == "ToolMessage":
-            print(f"    ⚙️ 工具执行结果: {message.content}")
-            print(f"    🔗 绑定的 Tool ID: {getattr(message, 'tool_call_id', '缺失!')}")
+            logging.getLogger(__name__).debug(str(f"    ⚙️ 工具执行结果: {message.content}"))
+            logging.getLogger(__name__).debug(str(f"    🔗 绑定的 Tool ID: {getattr(message, 'tool_call_id', '缺失!')}"))
         else:
-            print(f"    ❓ 未知消息内容: {message.content}")
-    print("🔥" * 25 + "\n")
+            logging.getLogger(__name__).debug(str(f"    ❓ 未知消息内容: {message.content}"))
+    logging.getLogger(__name__).debug(str("🔥" * 25 + "\n"))
 
 
 def _build_unconscious_response(
@@ -763,9 +751,9 @@ def _prepare_generation_context(
     trigger_result = trigger_state["trigger_result"]
     inventory_display_list = format_inventory_dict_to_display_list(npc_inv)
     has_healing_potion = (npc_inv.get("healing_potion", 0) or 0) >= 1
-    print(f"🚨 [DEBUG 状态核对] Speaker: {speaker}")
-    print(f"🚨 [DEBUG 状态核对] npc_inv (字典): {npc_inv}")
-    print(f"🚨 [DEBUG 状态核对] has_healing_potion (布尔): {has_healing_potion}")
+    logging.getLogger(__name__).debug(str(f"🚨 [DEBUG 状态核对] Speaker: {speaker}"))
+    logging.getLogger(__name__).debug(str(f"🚨 [DEBUG 状态核对] npc_inv (字典): {npc_inv}"))
+    logging.getLogger(__name__).debug(str(f"🚨 [DEBUG 状态核对] has_healing_potion (布尔): {has_healing_potion}"))
 
     current_npc_data = entities.get(speaker, {})
     runtime_state = _prepare_runtime_state(
@@ -819,7 +807,7 @@ async def _maybe_generate_banter_response(
     speaker = context["speaker"]
     character = context["character"]
     affection = context["affection"]
-    print(f"💬 [Banter Mode] {speaker.capitalize()} 使用极简模板吐槽...")
+    logging.getLogger(__name__).debug(str(f"💬 [Banter Mode] {speaker.capitalize()} 使用极简模板吐槽..."))
     banter_tpl = _prompt_environment().get_template("banter.j2")
     traits = character.data.get("personality", {}).get("traits", []) or []
     core_traits = ", ".join(str(trait) for trait in traits[:3]) if traits else "mysterious"
@@ -964,6 +952,7 @@ def _create_llm_client(idle_banter: bool) -> Any:
         base_url=settings.BASE_URL,
         temperature=0.7,
         max_completion_tokens=500,
+        max_retries=0,  # RetryPolicy owns the retry budget.
     )
     if idle_banter:
         return llm
@@ -976,15 +965,15 @@ async def _execute_llm_with_tools(
     player_inv_for_physics: Dict[str, Any],
     current_entities: Dict[str, Any],
     idle_banter: bool,
+    retry_policy: RetryPolicy = RetryPolicy(),
 ) -> tuple[Any, List[BaseMessage]]:
-    from ui.renderer import GameRenderer
 
     _debug_print_messages(lc_messages)
     llm_started_at = time.perf_counter()
     try:
-        response = await asyncio.wait_for(
-            llm_with_tools.ainvoke(lc_messages),
-            timeout=LLM_TIMEOUT_SECONDS,
+        response = await with_retry(
+            lambda: asyncio.wait_for(llm_with_tools.ainvoke(lc_messages), timeout=LLM_TIMEOUT_SECONDS),
+            component="generation_initial", policy=retry_policy,
         )
         emit_telemetry(
             "llm_call",
@@ -1010,7 +999,7 @@ async def _execute_llm_with_tools(
             token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         )
         return AIMessage(content="*（星界回响短暂中断，未能组织语言）*"), lc_messages
-    GameRenderer().print_system_info(
+    logger.debug(
         f"🔧 [底层透视] LLM 返回的 tool_calls: {getattr(response, 'tool_calls', [])}"
     )
 
@@ -1036,16 +1025,8 @@ async def _execute_llm_with_tools(
                 else:
                     inventory = current_entities.get(target, {}).get("inventory", {})
                 inventory = inventory or {}
-                found = False
-                for item_id, count in inventory.items():
-                    if keyword in item_id.lower() or keyword in registry.get_name(item_id).lower():
-                        tool_result_str = f"{target} 拥有 {count} 个 {item_id}。"
-                        found = True
-                        break
-                if not found:
-                    tool_result_str = (
-                        f"{target} 的背包里根本没有找到 '{keyword}'！他在撒谎或两手空空。"
-                    )
+                with inventory_scope({target: inventory}):
+                    tool_result_str = check_target_inventory.invoke({"target_id": target, "item_keyword": keyword})
             else:
                 tool_result_str = (
                     f"[系统] 未知工具: {tool_name}（物理动作请使用 JSON 中的 physical_action 字段）。"
@@ -1061,9 +1042,9 @@ async def _execute_llm_with_tools(
         )
         llm_started_at = time.perf_counter()
         try:
-            response = await asyncio.wait_for(
-                llm_with_tools.ainvoke(lc_messages),
-                timeout=LLM_TIMEOUT_SECONDS,
+            response = await with_retry(
+                lambda: asyncio.wait_for(llm_with_tools.ainvoke(lc_messages), timeout=LLM_TIMEOUT_SECONDS),
+                component="generation_followup", policy=retry_policy,
             )
             emit_telemetry(
                 "llm_call",
@@ -1093,12 +1074,12 @@ async def _execute_llm_with_tools(
             )
             response = AIMessage(content="*（星界回响中断，话语戛然而止）*")
             break
-        GameRenderer().print_system_info(
+        logger.debug(
             f"🔧 [底层透视] LLM 返回的 tool_calls (ReAct #{iteration_count}): "
             f"{getattr(response, 'tool_calls', [])}"
         )
         if iteration_count >= max_iterations:
-            print("⚠️ [安全拦截] Agent 内部工具调用次数超限 (>=5次)，强制终止循环！")
+            logging.getLogger(__name__).debug(str("⚠️ [安全拦截] Agent 内部工具调用次数超限 (>=5次)，强制终止循环！"))
             break
 
     if getattr(response, "tool_calls", None) and not (getattr(response, "content", None) or "").strip():
@@ -1119,7 +1100,7 @@ def _parse_and_apply_actions(
 ) -> Dict[str, Any]:
     json_parsed = parse_llm_json(raw_output)
     if DEBUG_AI_PAYLOAD:
-        print(f"📦 [底层 JSON 透视] \n{raw_output}\n")
+        logging.getLogger(__name__).debug(str(f"📦 [底层 JSON 透视] \n{raw_output}\n"))
 
     idle_merged: Optional[List[tuple[str, str]]] = None
     tool_physics_events: List[Any] = []
@@ -1205,7 +1186,7 @@ def _assemble_generation_output(
     state: GameState,
     context: Dict[str, Any],
     parsed_result: Dict[str, Any],
-) -> dict:
+) -> dict[str, Any]:
     speaker = context["speaker"]
     clean_text = parsed_result["clean_text"]
     idle_merged = parsed_result["idle_merged"]
@@ -1261,7 +1242,7 @@ def create_generation_node() -> Callable[[GameState], Coroutine[Any, Any, dict]]
     根据 state["current_speaker"] 动态加载 YAML 灵魂，实现多智能体话语权路由。
     """
 
-    async def generation_node(state: GameState) -> dict:
+    async def generation_node(state: GameState) -> dict[str, Any]:
         """
         LLM 生成节点。
         根据 current_speaker 动态加载对应角色，从 state 提取 affection / flags / inventory 等。
@@ -1280,7 +1261,7 @@ def create_generation_node() -> Callable[[GameState], Coroutine[Any, Any, dict]]
             speaker,
             memory_provider=ActorScopedMemoryProvider(memory_service.retriever),
         )
-        print(f"🗣️ Generation Node: {speaker.capitalize()} is speaking...")
+        logging.getLogger(__name__).debug(str(f"🗣️ Generation Node: {speaker.capitalize()} is speaking..."))
         early_return = _build_unconscious_response(state, speaker, character, entities)
         if early_return is not None:
             return early_return
@@ -1323,7 +1304,7 @@ def create_generation_node() -> Callable[[GameState], Coroutine[Any, Any, dict]]
     return generation_node
 
 
-async def generation_node(state: GameState) -> dict:
+async def generation_node(state: GameState) -> dict[str, Any]:
     """
     默认 Generation 节点（向后兼容 main_graph.py 等单测）。
     生产环境应使用 create_generation_node() 动态加载角色。

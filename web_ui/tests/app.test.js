@@ -2129,29 +2129,30 @@ describe("web_ui/app.js UI bindings", () => {
 
   test("test_workbench_query_preset_selects_scoped_agent_workflow", async () => {
     window.history.replaceState({}, "", "http://localhost/?workbench_preset=release_audit&workbench_static=1");
+    const payload = {
+      intent: "TOOL_ORCHESTRATION", route: "policy.evaluate", selected_agent: "reviewer_agent",
+      scoped_agent_view: {allowed_tools: ["audit_log_write"], masked_fields: ["direct_publish_action"]},
+      policy_gate: {decision: "deny", reason: "Backend role denies publish", matched_rule: "default_deny"},
+      proposed_tool_call: {name: "publish_policy_patch"}, domain_events: [],
+    };
+    const fetchMock = spyOnFetch().mockResolvedValue(mockResponse(payload));
     loadNewModules();
-    jest.isolateModules(() => {
-      require(WORKBENCH_PATH);
-    });
+    jest.isolateModules(() => { require(WORKBENCH_PATH); });
     await new Promise((resolve) => setTimeout(resolve, 90));
-
     expect(window.ControlledAgentWorkbench.initialPresetKey()).toBe("release_audit");
-    const active = document.querySelector("[data-workbench-preset].is-active");
-    expect(active).not.toBeNull();
-    expect(active.textContent).toContain("Release Audit");
-    expect(document.getElementById("dock-input").value).toContain("Reviewer Agent");
-    expect(document.getElementById("director-trace-mode").textContent).toBe("TOOL ORCHESTRATION");
+    expect(fetchMock).toHaveBeenCalledWith("/api/gate/evaluate", expect.objectContaining({method: "POST"}));
     expect(document.getElementById("runtime-workbench").dataset.outcome).toBe("blocked");
-    expect(document.getElementById("workbench-outcome-label").textContent).toBe("DIRECT PUBLISH BLOCKED");
-    expect(document.querySelector('[data-agent="reviewer_agent"]').classList.contains("is-selected")).toBe(true);
-    expect(document.querySelector('[data-agent="ops_agent"]').classList.contains("is-muted")).toBe(true);
-    expect(document.getElementById("workbench-proof-events").textContent).toContain("AUDIT_LOG_WRITTEN");
+    expect(document.getElementById("workbench-outcome-label").textContent).toBe("DENY");
+    expect(document.getElementById("workbench-outcome-detail").textContent).toBe("Backend role denies publish");
+    expect(document.getElementById("json-inspector").textContent).toContain('"decision": "deny"');
+  });
 
-    const inspectorText = document.getElementById("json-inspector").textContent;
-    expect(inspectorText).toContain('"selected_agent": "reviewer_agent"');
-    expect(inspectorText).toContain('"decision": "blocked"');
-    expect(inspectorText).toContain('"audit_log_write"');
-    expect(document.getElementById("payload-summary").textContent).toContain("direct_publish_action");
+  test("workbench shows unavailable when the gate cannot be reached", async () => {
+    spyOnFetch().mockRejectedValue(new Error("offline"));
+    jest.isolateModules(() => { require(WORKBENCH_PATH); });
+    await window.ControlledAgentWorkbench.activatePreset("policy_publish");
+    expect(document.getElementById("workbench-outcome-label").textContent).toBe("GATE UNAVAILABLE");
+    expect(document.getElementById("json-inspector").textContent).toContain("No backend decision");
   });
 
   test("test_director_timeline_trap_insight_summary_highlights_actor_runtime_ui", async () => {

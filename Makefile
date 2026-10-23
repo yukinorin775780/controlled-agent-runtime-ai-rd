@@ -13,6 +13,9 @@ evidence:
 	python scripts/generate_evidence_report.py
 
 check:
+	ruff check core server.py
+	mypy
+	npm test
 	pytest -q
 	python -m core.eval.runner --suite golden
 	python scripts/generate_benchmark.py --dry-run --max-cases 4

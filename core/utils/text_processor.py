@@ -120,7 +120,7 @@ def _sanitize_json_candidate(candidate: str) -> str:
     )
 
 
-def parse_llm_json(raw_text: str) -> dict:
+def parse_llm_json(raw_text: str) -> dict[str, Any]:
     """
     提取并解析 LLM 返回的 JSON，自动剥离 Markdown 代码块包裹。
     支持容错：清洗 `: +2`、`[+1, ...]` 等非法正数格式，解析失败时返回空字典以保证调用方不崩溃。

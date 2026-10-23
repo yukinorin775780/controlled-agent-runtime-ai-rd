@@ -1,46 +1,26 @@
 /**
  * workbench.js
- * Business-shaped runtime trace presets for the browser workbench.
+ * Sample candidate requests; authorization results always come from the backend.
  */
 (() => {
   "use strict";
 
   const PRESETS = Object.freeze({
     policy_publish: {
-      intent: "让 Ops Agent 校验客服知识库变更，eval 通过后调用 publish_policy_patch。",
+      intent: "评估 Ops Agent 的分阶段发布候选，核查当前源码的 golden 回放证据。",
       agent: "ops_agent",
-      route: "tool_orchestration.policy_publish",
-      tools: ["eval_summary", "policy_diff_read", "publish_policy_patch"],
-      maskedFields: ["raw_user_pii", "billing_token", "private_escalation_notes"],
-      outcome: {
-        tone: "approved",
-        label: "TOOL CALL APPROVED",
-        title: "Ops Agent can publish after eval gate",
-        detail: "Policy diff and golden eval pass before publish_policy_patch is allowed.",
-      },
       toolCall: {
         name: "publish_policy_patch",
         args: {
           patch_id: "kb-policy-2026-06-01-a",
-          eval_suite: "golden_support_qa",
+          eval_suite: "golden",
           rollout: "staged",
         },
       },
-      domainEvents: ["POLICY_CHECK_PASSED", "TOOL_CALL_APPROVED", "AUDIT_LOG_WRITTEN"],
-      result: "approved",
     },
     ticket_triage: {
-      intent: "让 Research Agent 查询近 24 小时玩家反馈异常，并只返回可公开的知识库候选。",
+      intent: "评估 Research Agent 近 24 小时公开知识库候选的检索权限。",
       agent: "research_agent",
-      route: "tool_orchestration.ticket_triage",
-      tools: ["ticket_search", "kb_lookup", "semantic_cluster"],
-      maskedFields: ["account_id", "payment_context", "internal_owner_notes"],
-      outcome: {
-        tone: "read_only",
-        label: "READ-ONLY SCOPE",
-        title: "Research Agent can retrieve but cannot publish",
-        detail: "Ticket search and KB lookup are available; deploy controls stay masked.",
-      },
       toolCall: {
         name: "ticket_search",
         args: {
@@ -49,31 +29,14 @@
           output_scope: "public_kb_candidate",
         },
       },
-      domainEvents: ["SCOPE_FILTER_APPLIED", "TOOL_CALL_APPROVED", "TRIAGE_CANDIDATES_EMITTED"],
-      result: "read_only",
     },
     release_audit: {
-      intent: "让 Reviewer Agent 检查灰度发布状态，禁止直接发布，只写入 release audit。",
+      intent: "验证 Reviewer Agent 的直接发布候选会被权限规则拒绝。",
       agent: "reviewer_agent",
-      route: "tool_orchestration.release_audit",
-      tools: ["ci_status", "eval_summary", "audit_log_write"],
-      maskedFields: ["deploy_token", "direct_publish_action"],
-      outcome: {
-        tone: "blocked",
-        label: "DIRECT PUBLISH BLOCKED",
-        title: "Reviewer Agent writes audit without release power",
-        detail: "Tool gate blocks direct publish while EventDrain still commits audit evidence.",
-      },
       toolCall: {
-        name: "audit_log_write",
-        args: {
-          release_id: "agent-runtime-rc-12",
-          gate: "ci_and_eval",
-          decision: "hold_for_manual_release",
-        },
+        name: "publish_policy_patch",
+        args: {patch_id: "agent-runtime-rc-12", eval_suite: "golden", rollout: "staged"},
       },
-      domainEvents: ["DIRECT_PUBLISH_BLOCKED", "CI_STATUS_READ", "AUDIT_LOG_WRITTEN"],
-      result: "blocked_publish",
     },
   });
 
@@ -117,46 +80,22 @@
     return value === "1" || value === "true" || value === "yes";
   }
 
-  function decisionForPreset(preset) {
-    if (preset.result === "blocked_publish") return "blocked";
-    if (preset.result === "read_only") return "approved_read_only";
-    return "approved";
-  }
-
   function isBlockedDecision(decision) {
-    return decision === "blocked";
+    return decision === "deny";
   }
 
-  function payloadForPreset(preset) {
-    const status = decisionForPreset(preset);
-    return {
-      intent: "TOOL_ORCHESTRATION",
-      route: preset.route,
-      selected_agent: preset.agent,
-      scoped_agent_view: {
-        prompt_slice: [
-          "task_intent",
-          "policy_boundary",
-          "allowed_tool_schema",
-          "visible_business_context",
-        ],
-        allowed_tools: preset.tools,
-        masked_fields: preset.maskedFields,
-      },
-      policy_gate: {
-        schema_valid: true,
-        role_allowed: true,
-        preconditions_met: !isBlockedDecision(status),
-        decision: status,
-      },
-      proposed_tool_call: preset.toolCall,
-      domain_events: preset.domainEvents,
-      ui_events: [
-        { type: "policy_check", result: status },
-        { type: isBlockedDecision(status) ? "tool_call_blocked" : "tool_call_approved", tool: preset.toolCall.name },
-        { type: "audit_event", result: preset.domainEvents[preset.domainEvents.length - 1] },
-      ],
-    };
+  async function payloadForPreset(preset) {
+    const response = await fetch("/api/gate/evaluate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({actor_id: preset.agent, tool_name: preset.toolCall.name, args: preset.toolCall.args}),
+    });
+    if (!response.ok) throw new Error("Gate service returned HTTP " + response.status);
+    const payload = await response.json();
+    if (!payload.policy_gate || !["allow", "deny"].includes(payload.policy_gate.decision)) {
+      throw new Error("Invalid gate response");
+    }
+    return payload;
   }
 
   function traceDetails(preset, payload) {
@@ -169,29 +108,25 @@
     return {
       player_input: {
         ...base,
-        ms: 42,
         explanation: "Business intent enters the runtime boundary.",
         input: preset.intent,
         output: "TOOL_ORCHESTRATION",
       },
       dm_router: {
         ...base,
-        ms: 87,
         explanation: "Director selects target agent and tool route before model generation.",
         input: "intent + policy registry",
-        output: preset.route,
+        output: payload.route,
       },
       actor_view_filter: {
         ...base,
-        ms: 63,
         explanation: "Scoped AgentView builds role prompt slice, allowed tools, and masked fields.",
         input: preset.agent + " role policy",
-        output: preset.tools.join(", "),
+        output: payload.scoped_agent_view.allowed_tools.join(", "),
         signal: "agent_signal",
       },
       actor_runtime: {
         ...base,
-        ms: 118,
         explanation: "Agent runtime prepares a typed tool candidate under the scoped view.",
         input: "scoped AgentView",
         output: preset.toolCall.name,
@@ -199,23 +134,20 @@
       },
       domain_event: {
         ...base,
-        ms: 96,
         explanation: "Policy/tool gate validates schema, permission, and preconditions.",
         input: JSON.stringify(preset.toolCall.args),
-        output: blocked ? "direct publish blocked" : "tool call approved",
+        output: payload.policy_gate.reason,
         signal: "agent_signal",
       },
       event_drain: {
         ...base,
-        ms: 52,
-        explanation: "EventDrain commits typed audit events and durable state.",
+        explanation: "Evaluation only; no tool execution or durable commit occurred.",
         input: "DomainEvent queue",
-        output: preset.domainEvents.join(" -> "),
+        output: "No events committed",
         signal: "agent_signal",
       },
       ui_events: {
         ...base,
-        ms: 39,
         explanation: "Workbench projects response, trace evidence, and state diff.",
         input: "committed events",
         output: "operator trace",
@@ -259,12 +191,12 @@
     const riskValue = $("fear-value");
     const riskBar = $("fear-bar");
     const approved = !isBlockedDecision(payload.policy_gate.decision);
-    if (confidence) confidence.textContent = "Policy Confidence";
-    if (confidenceValue) confidenceValue.textContent = approved ? "92" : "68";
-    if (confidenceBar) confidenceBar.style.width = approved ? "92%" : "68%";
-    if (risk) risk.textContent = "Tool Risk";
-    if (riskValue) riskValue.textContent = approved ? "18" : "61";
-    if (riskBar) riskBar.style.width = approved ? "18%" : "61%";
+    if (confidence) confidence.textContent = "Gate Decision";
+    if (confidenceValue) confidenceValue.textContent = payload.policy_gate.decision;
+    if (confidenceBar) confidenceBar.style.width = approved ? "100%" : "0%";
+    if (risk) risk.textContent = "Matched Rule";
+    if (riskValue) riskValue.textContent = payload.policy_gate.matched_rule;
+    if (riskBar) riskBar.style.width = "0%";
   }
 
   function setActiveButton(key) {
@@ -274,23 +206,23 @@
   }
 
   function renderWorkbenchEvidence(preset, payload) {
-    const tone = (preset.outcome && preset.outcome.tone) || "approved";
+    const tone = isBlockedDecision(payload.policy_gate.decision) ? "blocked" : "approved";
     const root = $("runtime-workbench");
     if (root) root.dataset.outcome = tone;
 
     const status = document.querySelector(".workbench-status strong");
-    if (status) status.textContent = (preset.outcome && preset.outcome.label) || payload.policy_gate.decision;
+    if (status) status.textContent = payload.policy_gate.decision.toUpperCase();
 
     const outcome = $("workbench-outcome");
     if (outcome) outcome.dataset.outcome = tone;
-    setText("workbench-outcome-label", preset.outcome && preset.outcome.label);
-    setText("workbench-outcome-title", preset.outcome && preset.outcome.title);
-    setText("workbench-outcome-detail", preset.outcome && preset.outcome.detail);
+    setText("workbench-outcome-label", payload.policy_gate.decision.toUpperCase());
+    setText("workbench-outcome-title", payload.policy_gate.matched_rule);
+    setText("workbench-outcome-detail", payload.policy_gate.reason);
 
     setText("workbench-proof-agent", payload.selected_agent);
     setText("workbench-proof-tools", safeArray(payload.scoped_agent_view.allowed_tools).join(", "));
     setText("workbench-proof-masked", safeArray(payload.scoped_agent_view.masked_fields).join(", "));
-    setText("workbench-proof-events", safeArray(payload.domain_events).join(" -> "));
+    setText("workbench-proof-events", safeArray(payload.domain_events).join(" -> ") || "No events committed");
 
     document.querySelectorAll(".scope-table [data-agent]").forEach((row) => {
       const selected = row.dataset.agent === payload.selected_agent;
@@ -304,9 +236,33 @@
     });
   }
 
-  function activatePreset(key, options = {}) {
+  let requestSequence = 0;
+
+  async function activatePreset(key, options = {}) {
     const preset = PRESETS[key] || PRESETS.policy_publish;
-    const payload = payloadForPreset(preset);
+    const sequence = ++requestSequence;
+    setText("workbench-outcome-label", "EVALUATING");
+    const root = $("runtime-workbench");
+    if (root) root.dataset.outcome = "pending";
+    let payload;
+    try {
+      payload = await payloadForPreset(preset);
+    } catch (error) {
+      if (sequence !== requestSequence) return;
+      if (root) root.dataset.outcome = "unavailable";
+      const status = document.querySelector(".workbench-status strong");
+      if (status) status.textContent = "UNAVAILABLE";
+      setText("patience-value", "Unavailable");
+      setText("fear-value", "Unavailable");
+      setText("workbench-outcome-label", "GATE UNAVAILABLE");
+      setText("workbench-outcome-title", "No decision received");
+      setText("workbench-outcome-detail", error.message);
+      const inspector = $("json-inspector");
+      if (inspector) inspector.textContent = "No backend decision available.";
+      for (const id of ["payload-summary", "workbench-proof-events", "workbench-proof-agent", "workbench-proof-tools", "workbench-proof-masked"]) setText(id, "Unavailable");
+      return;
+    }
+    if (sequence !== requestSequence) return;
     setActiveButton(key);
     const dock = $("dock-input");
     if (dock) dock.value = preset.intent;

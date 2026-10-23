@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from core.gate.policy_gate import ToolCall
+from core.gate.workbench import evaluate_candidate
 from core import inventory
 from core.application.game_service import (
     GameService,
@@ -36,13 +38,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Controlled Agent Sim Runtime API", version="2.0", lifespan=lifespan)
-game_service = GameService()
+game_service = GameService(db_path=os.getenv("CONTROLLED_AGENT_DB_PATH", "memory.db"))
 
 
-# 允许跨域请求 (为了下周的前端网页做准备)
+# CORS origins are configurable for local deployments.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[origin.strip() for origin in os.getenv(
+        "CONTROLLED_AGENT_CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000"
+    ).split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,6 +100,18 @@ class ChatResponse(BaseModel):
 class ResetRequest(BaseModel):
     session_id: str = "test_consume_003"
     map_id: Optional[str] = None
+
+
+class GateRequest(BaseModel):
+    actor_id: str
+    tool_name: str
+    args: Dict[str, Any] = {}
+    target: str = ""
+
+
+@app.post("/api/gate/evaluate")
+def gate_endpoint(req: GateRequest) -> Dict[str, Any]:
+    return evaluate_candidate(req.actor_id, ToolCall(req.tool_name, req.args, req.target))
 
 
 @app.get("/", include_in_schema=False)

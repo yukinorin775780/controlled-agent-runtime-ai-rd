@@ -23,10 +23,10 @@ def _is_consumable_item(item_id: str, item_data: Dict[str, Any]) -> bool:
 
 
 def apply_physics(
-    current_entities: dict,
-    player_inventory: dict,
-    item_transfers: list,
-    hp_changes: list,
+    current_entities: dict[str, Any],
+    player_inventory: dict[str, Any],
+    item_transfers: list[Any],
+    hp_changes: list[Any],
 ) -> List[str]:
     """
     处理实体的物理结算，包括物品转移、消耗、环境掉落以及生命值变动。
@@ -148,7 +148,7 @@ def apply_physics(
     return journal_events
 
 
-def apply_movement(current_entities: dict, actor_id: str, target_location: str) -> List[str]:
+def apply_movement(current_entities: dict[str, Any], actor_id: str, target_location: str) -> List[str]:
     """
     语义地标移动：将 NPC 的 position 更新为语义 waypoint id（如 camp_fire），非绝对坐标。
     直接修改 current_entities[actor_id]。
@@ -210,7 +210,7 @@ def execute_loot(
     return f"🎒 [系统] {character_id} 搜刮了 {target_obj_id} 的所有物品。"
 
 
-def apply_environment_interaction(env_objects: dict, target_id: str, action_detail: str, actor_id: str) -> List[str]:
+def apply_environment_interaction(env_objects: dict[str, Any], target_id: str, action_detail: str, actor_id: str) -> List[str]:
     """
     处理角色与环境物体（如宝箱、门）的物理交互。
     """

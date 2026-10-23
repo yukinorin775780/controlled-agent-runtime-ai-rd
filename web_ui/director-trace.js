@@ -337,6 +337,9 @@
     const payload = safeObj(data);
     const events = safeArr(opts.uiEvents || opts.events);
     const blob = textBlob(payload, opts.userLine, opts.intent);
+    if (payload.execution === "evaluation_only") {
+      return { mode: "CANDIDATE EVALUATION", summary: "Backend PolicyGate evaluated this candidate. No tool execution or state commit occurred." };
+    }
     if (!blob.trim() && !events.length) {
       return {
         mode: "WORKBENCH READY",

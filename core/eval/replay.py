@@ -44,8 +44,6 @@ def replay_patch_targets() -> tuple[str, ...]:
         "core.memory.compat.datetime",
         "core.systems.dice.random.randint",
         "core.systems.mechanics.random.randint",
-        "core.graph.nodes.dm.random.choice",
-        "core.graph.graph_routers.random.random",
     )
 
 
@@ -73,13 +71,6 @@ def apply_replay_patches(
     stack.enter_context(
         patch("core.systems.mechanics.random.randint", new=ctx.rng.randint)
     )
-    stack.enter_context(
-        patch("core.graph.nodes.dm.random.choice", new=ctx.rng.choice)
-    )
-    stack.enter_context(
-        patch("core.graph.graph_routers.random.random", new=ctx.rng.random)
-    )
-
     # Optional scripted-LLM patches.
     for spec in list(llm_specs or []):
         if spec.is_async:

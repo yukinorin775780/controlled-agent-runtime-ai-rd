@@ -4,6 +4,8 @@ LangGraph 应用工厂。
 Checkpointer 由调用方（如 main.py）创建并传入，支持 AsyncSqliteSaver 等异步实现。
 """
 
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 
 from core.graph.graph_routers import (
@@ -23,7 +25,7 @@ from core.graph.nodes.lore_node import lore_node
 from core.graph.nodes.mechanics import mechanics_node
 
 
-def route_after_input(state: dict) -> str:
+def route_after_input(state: dict[str, Any]) -> str:
     """拦截开发者指令与纯系统指令（不进入 world_tick / DM，不唤醒 LLM）"""
     intent = state.get("intent", "")
     if intent in ("dev_command", "command_failed", "command_done"):
@@ -31,14 +33,14 @@ def route_after_input(state: dict) -> str:
     return "world_tick"
 
 
-def route_after_tick(state: dict) -> str:
+def route_after_tick(state: dict[str, Any]) -> str:
     """只短路 system_wait；聊天和 action_use 进入 DM 判定和大模型反应"""
     if state.get("intent") == "system_wait":
         return "__end__"
     return "dm_analysis"
 
 
-def route_after_generation(state: dict) -> str:
+def route_after_generation(state: dict[str, Any]) -> str:
     """多人发言队列：若 speaker_queue 非空，继续让下一位发言"""
     if state.get("speaker_queue"):
         return "advance_speaker"

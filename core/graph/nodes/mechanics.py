@@ -2,11 +2,15 @@
 Mechanics 节点：技能检定与掷骰。
 """
 
+from typing import Any
+
+import logging
+
 from core.graph.graph_state import GameState
 from core.systems import mechanics
 
 
-def mechanics_node(state: GameState) -> dict:
+def mechanics_node(state: GameState) -> dict[str, Any]:
     """
     根据意图执行技能检定（PERSUASION/DECEPTION/STEALTH/INSIGHT 等）。
 
@@ -18,7 +22,7 @@ def mechanics_node(state: GameState) -> dict:
     if intent in ["chat", "CHAT", "command_done", "pending", "gift_given", "item_used"] and not is_probing_secret:
         return {}
 
-    print(f"⚙️ Mechanics Node: Processing {intent} (is_probing_secret={is_probing_secret})...")
+    logging.getLogger(__name__).debug(str(f"⚙️ Mechanics Node: Processing {intent} (is_probing_secret={is_probing_secret})..."))
     normalized_intent = str(intent).strip().upper()
     intent_context = state.get("intent_context") if isinstance(state, dict) else {}
     if isinstance(intent_context, dict) and intent_context.get("gatekeeper_boss_resolution_context"):

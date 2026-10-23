@@ -2,6 +2,8 @@
 空存档创世：统一生成初始世界状态，供 CLI (main) 与 API (server) 复用。
 """
 
+import logging
+
 import copy
 import json
 import os
@@ -516,7 +518,7 @@ def get_initial_world_state(map_id: str = "training_range") -> Dict[str, Any]:
     """
     生成一个全新的、初始化的游戏世界状态（空存档创世）。
     """
-    print("🌱 检测到空存档，正在生成初始世界状态...")
+    logging.getLogger(__name__).debug(str("🌱 检测到空存档，正在生成初始世界状态..."))
 
     # 尝试加载玩家本地背包
     init_player_inv: Dict[str, Any] = {"healing_potion": 2}
@@ -527,7 +529,7 @@ def get_initial_world_state(map_id: str = "training_range") -> Dict[str, Any]:
                 inv = p_data.get("inventory", init_player_inv)
                 init_player_inv = dict(inv) if isinstance(inv, dict) else init_player_inv
         except Exception as e:
-            print(f"⚠️ 无法读取 player.json，使用默认背包: {e}")
+            logging.getLogger(__name__).debug(str(f"⚠️ 无法读取 player.json，使用默认背包: {e}"))
 
     # 构建并返回完整的初始状态字典
     map_data = get_map_data(map_id)

@@ -2,6 +2,9 @@
 Input / World Tick 节点：斜杠命令与世界心跳。
 """
 
+from typing import Any
+
+import logging
 import copy
 import json
 
@@ -223,7 +226,7 @@ def _looks_like_gatekeeper_mercy_text(map_id: str, state: GameState, user_input:
     )
 
 
-def input_node(state: GameState) -> dict:
+def input_node(state: GameState) -> dict[str, Any]:
     """
     处理斜杠命令（/give, /use, /add, /reset 等）。
 
@@ -642,16 +645,14 @@ def input_node(state: GameState) -> dict:
     }
 
 
-def world_tick_node(state: dict) -> dict:
+def world_tick_node(state: dict[str, Any]) -> dict[str, Any]:
     """世界心跳节点：推进回合数，遍历所有实体结算状态效果"""
-    from ui.renderer import GameRenderer
 
-    ui = GameRenderer()
     current_turn = state.get("turn_count", 0) + 1
 
     time_cycles = ["晨曦 (Morning)", "正午 (Noon)", "黄昏 (Dusk)", "深夜 (Night)"]
     new_time = time_cycles[(current_turn // 3) % 4]
-    ui.print_system_info(f"⏳ [World Tick] 回合推进至 {current_turn} | 当前时间: {new_time}")
+    logging.getLogger(__name__).debug(f"⏳ [World Tick] 回合推进至 {current_turn} | 当前时间: {new_time}")
 
     entities_in = state.get("entities") or copy.deepcopy(default_entities)
     entities_out = {}
@@ -671,18 +672,18 @@ def world_tick_node(state: dict) -> dict:
                 current_hp = max(0, current_hp - b_val)
                 actual_damage = old_hp - current_hp
                 if actual_damage > 0:
-                    ui.print_system_info(
+                    logging.getLogger(__name__).debug(
                         f"🩸 [Status] {entity_id} 因 {b_id} 受到 {actual_damage} 点伤害！剩余 HP: {current_hp}"
                     )
             elif b_id in ["regeneration"]:
                 current_hp = min(20, current_hp + b_val)
-                ui.print_system_info(f"✨ [Status] {entity_id} 因 {b_id} 恢复 {b_val} 点生命！剩余 HP: {current_hp}")
+                logging.getLogger(__name__).debug(f"✨ [Status] {entity_id} 因 {b_id} 恢复 {b_val} 点生命！剩余 HP: {current_hp}")
 
             buff["duration"] -= 1
             if buff["duration"] > 0:
                 surviving_buffs.append(buff)
             else:
-                ui.print_system_info(f"💨 [Status] {entity_id} 的 {b_id} 状态已解除。")
+                logging.getLogger(__name__).debug(f"💨 [Status] {entity_id} 的 {b_id} 状态已解除。")
 
         entity_data["hp"] = max(0, current_hp)
         entity_data["active_buffs"] = surviving_buffs

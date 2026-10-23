@@ -4,7 +4,6 @@ AFK 闲聊保护性测试。
 """
 
 import asyncio
-from unittest.mock import patch
 
 from core.graph.nodes.dm import dm_node
 
@@ -38,9 +37,7 @@ def test_idle_banter_selects_only_living_party_npc():
         },
     }
 
-    with patch("core.graph.nodes.dm.random.choice", return_value="analyst") as mock_choice:
-        result = asyncio.run(dm_node(state))
+    result = asyncio.run(dm_node(state))
 
-    mock_choice.assert_called_once_with(["analyst"])
     assert result["current_speaker"] == "analyst"
     assert result["intent"] == "trigger_idle_banter"

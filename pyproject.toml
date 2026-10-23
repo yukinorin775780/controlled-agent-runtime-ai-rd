@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["core/gate", "core/intent.py", "core/actors/retry.py", "core/actors/executor.py", "core/tools/npc_tools.py", "core/application/checkpoint_lock.py"]
+follow_imports = "skip"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_return_any = true

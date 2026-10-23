@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol, Typ
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import START
 
+from core.application.checkpoint_lock import checkpoint_lock
 from core.campaigns import detect_lab_intro_awareness
 from core.actors.reflection import run_reflection_tick
 from core.engine.physics import execute_loot
@@ -132,7 +133,7 @@ class GameService:
         try:
             config = {"configurable": {"thread_id": session_id}}
 
-            async with self._saver_factory(self._db_path) as saver:
+            async with checkpoint_lock(self._db_path), self._saver_factory(self._db_path) as saver:
                 graph = self._graph_builder(checkpointer=saver)
                 previous_state = await self._load_checkpoint_state(graph, config)
                 previous_journal_len = len(previous_state.get("journal_events") or [])
@@ -316,7 +317,7 @@ class GameService:
     ) -> Dict[str, Any]:
         """Load the current session state and optionally run Genesis on empty checkpoints."""
         config = {"configurable": {"thread_id": session_id}}
-        async with self._saver_factory(self._db_path) as saver:
+        async with checkpoint_lock(self._db_path), self._saver_factory(self._db_path) as saver:
             graph = self._graph_builder(checkpointer=saver)
             state = await self._load_checkpoint_state(graph, config)
             if initialize_if_missing and self._requires_state_reinitialization(state, map_id=map_id):
@@ -331,7 +332,7 @@ class GameService:
     ) -> ChatTurnResult:
         """Reinitialize one session checkpoint without deleting global DB artifacts."""
         config = {"configurable": {"thread_id": session_id}}
-        async with self._saver_factory(self._db_path) as saver:
+        async with checkpoint_lock(self._db_path), self._saver_factory(self._db_path) as saver:
             graph = self._graph_builder(checkpointer=saver)
             existing_state = await self._load_checkpoint_state(graph, config)
             resolved_map_id = str(map_id or "").strip()

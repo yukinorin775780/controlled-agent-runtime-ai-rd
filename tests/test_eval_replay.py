@@ -82,7 +82,6 @@ def test_apply_replay_patches_applies_clock_rng_and_llm_stubs():
         llm_specs=(LlmPatchSpec(target="core.llm.dm.analyze_intent", channel="dm"),),
     ):
         import core.application.game_service as game_service_mod
-        import core.graph.graph_routers as routers_mod
         import core.llm.dm as dm_mod
         import core.systems.dice as dice_mod
 
@@ -90,5 +89,4 @@ def test_apply_replay_patches_applies_clock_rng_and_llm_stubs():
         assert game_service_mod.time.perf_counter() == 1.0
         assert game_service_mod.time.perf_counter() == 2.0
         assert dice_mod.random.randint(1, 20) == 17
-        assert routers_mod.random.random() == pytest.approx(0.25, abs=1e-9)
         assert dm_mod.analyze_intent("hello") == {"intent": "CHAT"}

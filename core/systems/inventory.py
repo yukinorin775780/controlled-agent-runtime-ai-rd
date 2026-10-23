@@ -3,6 +3,8 @@ Inventory Management Module (Data-Driven Architecture)
 Handles item storage and management using a registry-based system.
 """
 
+import logging
+
 import os
 from typing import Dict, List, Optional, Any
 import yaml
@@ -52,7 +54,7 @@ class ItemRegistry:
         """
         try:
             if not os.path.exists(filepath):
-                print(f"[ItemRegistry] Warning: Item database not found: {filepath}")
+                logging.getLogger(__name__).debug(str(f"[ItemRegistry] Warning: Item database not found: {filepath}"))
                 return False
             
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -69,11 +71,11 @@ class ItemRegistry:
                 cls._loaded = True
                 return True
             else:
-                print("[ItemRegistry] Warning: No 'items' key found in YAML")
+                logging.getLogger(__name__).debug(str("[ItemRegistry] Warning: No 'items' key found in YAML"))
                 return False
                 
         except Exception as e:
-            print(f"[ItemRegistry] Error loading item database: {e}")
+            logging.getLogger(__name__).debug(str(f"[ItemRegistry] Error loading item database: {e}"))
             return False
     
     @classmethod
