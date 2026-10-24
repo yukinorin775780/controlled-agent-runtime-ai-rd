@@ -10,7 +10,7 @@ Ops / Research / Reviewer 属于**展示层 reframing**。工作台现在调用�
 
 ## Evidence / Eval 分层
 
-上方 CI 链接可核查 pytest、golden eval、npm test、Ruff 和核心新模块 mypy 的实际运行。只有推送后 GitHub 才能验证此次修改，本地通过不能代表远端 CI 已通过。
+上方 CI 链接可核查 pytest、golden eval、npm test、Ruff 和核心新模块 mypy 的实际运行。结果以对应提交的公开 CI 运行记录为准。
 
 - **50/50 golden eval** 是无 live model 的确定性逻辑重放，固定模型回复、骰子与时钟，证明逻辑无回归，不证明真实模型质量。
 - **真实 LLM benchmark** 只有 4 个 case，需要模型密钥；结论范围限于这些案例。`--dry-run` 只是选择案例。

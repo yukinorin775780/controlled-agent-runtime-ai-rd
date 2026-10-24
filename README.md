@@ -10,7 +10,7 @@ The core is a controlled agent runtime. Hazard Lab is its stateful stress-test s
 
 ## Evidence and evaluation limits
 
-The linked CI workflow runs pytest, golden replay, npm tests, Ruff and focused mypy checks. Its badge is the public execution record; local results do not imply a successful remote run. These local changes must be pushed before GitHub can verify them.
+The linked CI workflow runs pytest, golden replay, npm tests, Ruff and focused mypy checks. Its badge is the public execution record; local results do not imply a successful remote run.
 
 - **50/50 golden eval** means deterministic logical replay with scripted model responses and controlled dice/time. It checks regression of logic, visibility and state commits, not live model quality.
 - **Real LLM benchmark** has four cases; it is separate, requires credentials, and measures behavior only within those cases. A benchmark dry-run only selects cases and proves no model quality result.
