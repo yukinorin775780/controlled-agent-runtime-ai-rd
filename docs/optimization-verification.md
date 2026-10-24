@@ -32,7 +32,9 @@ The workbench backend was also checked over HTTP with curl independently of the 
 
 ## Remaining external verification
 
-Docker engine started and Compose syntax passed. An actual build was attempted, but Docker Hub returned `insufficient_scope` while resolving the public Python base image. Public ECR and clean-credential Docker Hub downloads were attempted; required layers did not finish during verification. **No successful container build/start is claimed.** The Dockerfile supports `PYTHON_IMAGE` and `PIP_INDEX_URL` build arguments; Compose exposes `CONTROLLED_AGENT_PYTHON_IMAGE` and `CONTROLLED_AGENT_PIP_INDEX_URL` for accessible mirrors without changing defaults or user Docker settings.
+Docker was reverified on 2026-10-24 and **passed actual build, Compose startup and HTTP acceptance** in Linux/arm64 containers with Python 3.11.17, running as UID 1000. Each repository passed 473 pytest cases, 50/50 golden replay, Ruff and mypy inside its own image. Thirteen live HTTP checks per project verified static UI serving, allow/deny/default-deny gate behavior, CORS, initialization, eight concurrent writes without data loss, source-bound golden evidence, checkpoint persistence after container recreation, and reset.
+
+The default Docker Hub resolution hit an `insufficient_scope` error from the current host registry route. Temporary build arguments selected `public.ecr.aws/docker/library/python:3.11-slim` and `https://mirrors.aliyun.com/pypi/simple`, without changing global Docker settings. See [Docker verification](docker-verification.md) for reproduction. Test containers and dedicated test volumes were removed after acceptance; images remain cached.
 
 Remote CI requires pushing the local branch. The existing four-case live LLM benchmark was not rerun; its dry-run selected four cases only. No production connectors or production authorization service were added.
 
